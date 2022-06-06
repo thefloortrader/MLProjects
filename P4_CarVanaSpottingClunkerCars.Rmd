@@ -1,0 +1,907 @@
+---
+title: "Project 4 (Spotting Clunkers): BAN 6053 - Introduction to Machine Learning"
+author: Tyler Grosman
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(pROC)
+library(caret)
+library(tidyverse)
+library(lubridate)
+library(janitor)
+library(skimr)
+library(lubridate)
+library(RSocrata)
+library(tidyquant)
+library(tidymodels)
+library(ranger)
+library(topicmodels)
+library(readr)
+library(tidyverse)
+library(lubridate)
+library(dplyr)
+library(tidytext)
+library(rtweet)
+library(readxl)
+library(janitor)
+library(devtools)
+library(Rcpp)
+library(vip)
+library(ggplot2)
+library(ggthemes)
+library(corrplot)
+library(corrr)
+library(MASS)
+library(VIF)
+library(vip)
+library(fastDummies)
+library(kableExtra)
+library(GGally)
+library(kableExtra)
+library(parallel)
+library(doParallel)
+library(fastshap)
+library(rpart.plot)
+library(ggpubr)
+library(imputeTS)
+library(xgboost)
+library(glmnet) 
+library(rpart.plot) 
+library(reshape2)
+library(embed)
+library(textrecipes)
+library(stopwords)
+
+```
+
+```{r}
+#setwd("C:/Users/tyler/OneDrive/Documents/Projects_and_homework/MSBA Fall 2021/BAN 6053 Intro. to Machine Learning/Project 4")
+```
+
+```{r}
+training <- read_csv("project_4_training-2.csv") %>%
+  clean_names() %>%
+  mutate(is_bad_buy = as_factor(is_bad_buy))
+
+kaggle <- read_csv("project_4_kaggle-2.csv") %>%
+  clean_names()
+```
+
+```{r}
+skim(training)
+skim(kaggle)
+```
+## High cardinality vars: make, model, trim, sub_model, color, size, vnst, quality_code
+
+## -- Frequency Encoding --
+```{r}
+make_freq <- training %>%
+  group_by(make) %>%
+  summarise(make_freq = n())
+head(make_freq)
+
+model_freq <- training %>%
+  group_by(model) %>%
+  summarise(model_freq = n())
+head(model_freq)
+
+trim_freq <- training %>%
+  group_by(trim) %>%
+  summarise(trim_freq = n())
+head(trim_freq)
+
+sub_model_freq <- training %>%
+  group_by(sub_model) %>%
+  summarise(sub_model_freq = n())
+head(sub_model_freq)
+
+color_freq <- training %>%
+  group_by(color) %>%
+  summarise(color_freq = n())
+head(color_freq)
+
+size_freq <- training %>%
+  group_by(size) %>%
+  summarise(size_freq = n())
+head(size_freq)
+
+vnst_freq <- training %>%
+  group_by(vnst) %>%
+  summarise(vnst_freq = n())
+head(vnst_freq)
+
+quality_code_freq <- training %>%
+  group_by(quality_code) %>%
+  summarise(quality_code_freq = n())
+head(quality_code_freq)
+```
+## -- Joined Data --
+
+```{r}
+training_prep <- training %>%
+  left_join(make_freq) %>%
+  dplyr::select(-make) %>%
+  left_join(model_freq) %>%
+  dplyr::select(-model) %>%
+  left_join(sub_model_freq) %>%
+  dplyr::select(-sub_model) %>%
+  left_join(trim_freq) %>%
+  dplyr::select(-trim) %>%
+  left_join(vnst_freq) %>%
+  dplyr::select(-vnst) %>%
+  left_join(color_freq) %>%
+  dplyr::select(-color) %>%
+  left_join(size_freq) %>%
+  dplyr::select(-size) %>%
+  left_join(quality_code_freq) %>%
+  dplyr::select(-quality_code)
+```
+```{r}
+training_prep <- training_prep %>%
+  mutate_if(is.character, as.factor) %>%
+  dplyr::select(-purch_date, -id, -veh_odo_rand_num)
+```
+
+```{r}
+training %>%
+  group_by(is_bad_buy) %>%
+  summarise(n = n()) %>%
+  mutate(pct = n/sum(n)) -> target_bad_buy
+
+TC_plotf  <- ggtexttable(target_bad_buy, rows = NULL, 
+                        theme = ttheme("mOrange"))
+
+target_bad_buy %>%
+  ggplot(aes(x = is_bad_buy, y = n)) +
+  geom_col() + 
+  labs("Count") -> p1f
+
+target_bad_buy %>%
+  ggplot(aes(x = is_bad_buy, y = pct)) +
+  geom_col() + 
+  labs(title = "Clunker Rate") -> p2f
+
+ggarrange(p2f, TC_plotf, 
+          ncol = 1, nrow = 2,
+          heights = c(1, 0.3)) 
+
+training <- na_mean(training)
+
+cormat <- training %>%
+  mutate(is_bad_buy = as.numeric(is_bad_buy)) %>%
+  dplyr::select(-id) %>%
+  select_if(is.numeric) %>%
+  na.omit() %>%
+  cor() %>%
+  round(digits = 2) %>%
+  melt()
+
+cormat %>%
+  ggplot(aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient2(mid = "#FBFEF9",low = "#A63446",high = "#0C6291") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  geom_text(aes(label = round(value, 3)), color = "blue") +
+  labs(title = "Correlation Matrix Heatmap")
+
+```
+
+## Quick Graphs (Numerical)
+
+```{r}
+numeric_graphs <- function(col){
+  ggplot(training, aes(x = ! ! as.name(col))) +
+    geom_histogram(aes(fill = is_bad_buy), position = "stack") +
+    geom_hline(yintercept = 0.1236) +
+    labs(title = paste("Clunkers by", col, sep = " "))
+}
+
+for (column in names(training %>% select_if(is.numeric))){
+    chart <- numeric_graphs(column)
+    print(chart)
+  }
+```
+
+## Quick Graphs (Categorical)
+
+```{r}
+char_function <- function(col) {
+    ggplot(training_prep, aes(x=!!as.name(col))) + 
+    geom_bar(aes(fill = is_bad_buy), position = "fill") +
+    geom_hline(yintercept = 0.1236)+
+    labs(title = paste("Bad Buy ", col, sep = ""), x = col, y = "  ")
+}
+
+for (col in names(training_prep %>% select_if(is.factor))){
+  if (col != 'is_bad_buy'){
+    chart1 <- char_function(col)
+    print(chart1)
+  }
+}
+```
+
+# SIGNIFICANT VARS: 
+# - VNZIP of "1" was perfect predictor (1.00) of clunker vehicles (n = 41,029; roughly 5k/36k vehicles with VNZIP "1" were clunkers)
+# - wheel_type_id (NA ~75% bad buy - more likely that if there is no wheel_type_id that car is a bad buy)
+# - top_three_american_brands: FORD (15.9% clunker rate)
+# - AK = State with the highest clunker rate (27.3%)
+# - SPORTS cars have worst clunker rate (21.4%)
+```{r}
+## Exploratory Analysis for Numerical Vars: 
+## Binary/small: veh_year, vehicle_age, vnzip1 (BINARY), is_online_sale (BINARY), 
+## Numerous/large: veh_odo, mmr_acquisition_auction_average_price, mmr_acquisition_auction_clean_price, mmr_acquisition_retail_average_price, mmr_acquisiton_retail_clean_price, mmr_current_auction_average_price, mmr_current_auction_clean_price, mmr_current_retail_average_price, mmr_current_retail_clean_price, byrno, warranty_cost
+
+training %>%
+  group_by(auction, is_bad_buy)%>%
+  summarize(n = n()) %>%
+  pivot_wider(names_from = is_bad_buy, values_from = n, values_fill = 0) %>%
+  mutate(n = `0` + `1`,
+         pct_badbuy = round(`1`/n, 3)) %>%
+  arrange(desc(pct_badbuy))
+training %>%
+  group_by(auction) %>%
+  mutate(is_bad_buy = as.character(is_bad_buy)) %>%
+  ggplot(aes(auction, fill = is_bad_buy)) +
+  geom_bar(position = "fill") +
+  labs(title = "Clunker Rate by Vehicle Auction Type") +
+  ylab("Clunker Rate (%)") +
+  xlab("Year")
+
+training %>%
+  group_by(veh_year, is_bad_buy)%>%
+  summarize(n = n()) %>%
+  pivot_wider(names_from = is_bad_buy, values_from = n, values_fill = 0) %>%
+  mutate(n = `0` + `1`,
+         pct_badbuy = round(`1`/n, 3)) %>%
+  arrange(desc(pct_badbuy))
+training %>%
+  mutate(veh_year = as.character(veh_year)) %>%
+  group_by(veh_year) %>%
+  mutate(is_bad_buy = as.character(is_bad_buy)) %>%
+  ggplot(aes(veh_year, fill = is_bad_buy)) +
+  geom_bar(bins = 10, position = "fill") +
+  labs(title = "Clunker Rate by Vehicle Manufacturing Year") +
+  ylab("Clunker Rate (%)") +
+  xlab("Year")
+
+training %>%
+  group_by(vehicle_age, is_bad_buy)%>%
+  summarize(n = n()) %>%
+  pivot_wider(names_from = is_bad_buy, values_from = n, values_fill = 0) %>%
+  mutate(n = `0` + `1`,
+         pct_badbuy = round(`1`/n, 3)) %>%
+  arrange(desc(pct_badbuy))
+training %>%
+  mutate(vehicle_age = as.character(vehicle_age)) %>%
+  group_by(vehicle_age) %>%
+  mutate(is_bad_buy = as.character(is_bad_buy)) %>%
+  ggplot(aes(vehicle_age, fill = is_bad_buy)) +
+  geom_bar(bins = 20, position = "fill") +
+  labs(title = "Clunker Rate by Vehicle Age (yrs.)") +
+  ylab("Clunker Rate (%)") +
+  xlab("Vehicle Age (yrs.)")
+
+training %>%
+  group_by(make, is_bad_buy)%>%
+  summarize(n = n()) %>%
+  pivot_wider(names_from = is_bad_buy, values_from = n, values_fill = 0) %>%
+  mutate(n = `0` + `1`,
+         pct_badbuy = round(`1`/n, 3)) %>%
+  arrange(desc(pct_badbuy))
+training %>%
+  group_by(make) %>%
+  mutate(is_bad_buy = as.character(is_bad_buy)) %>%
+  ggplot(aes(make, fill = is_bad_buy)) +
+  geom_bar(position = "fill") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Clunker Rate by Make") +
+  ylab("Clunker Rate (%)") +
+  xlab("Make")
+
+training %>%
+  group_by(model, is_bad_buy)%>%
+  summarize(n = n()) %>%
+  pivot_wider(names_from = is_bad_buy, values_from = n, values_fill = 0) %>%
+  mutate(n = `0` + `1`,
+         pct_badbuy = round(`1`/n, 3)) %>%
+  arrange(desc(pct_badbuy))
+training %>%
+  group_by(model) %>%
+  mutate(is_bad_buy = as.character(is_bad_buy)) %>%
+  ggplot(aes(model, fill = is_bad_buy)) +
+  geom_bar(position = "fill") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Clunker Rate by Model") +
+  ylab("Clunker Rate (%)") +
+  xlab("Model")
+
+training %>%
+  group_by(trim, is_bad_buy)%>%
+  summarize(n = n()) %>%
+  pivot_wider(names_from = is_bad_buy, values_from = n, values_fill = 0) %>%
+  mutate(n = `0` + `1`,
+         pct_badbuy = round(`1`/n, 3)) %>%
+  arrange(desc(pct_badbuy))
+training %>%
+  group_by(trim) %>%
+  mutate(is_bad_buy = as.character(is_bad_buy)) %>%
+  ggplot(aes(trim, fill = is_bad_buy)) +
+  geom_bar(position = "fill") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Clunker Rate by Trim Type") +
+  ylab("Clunker Rate (%)") +
+  xlab("Trim Type")
+
+training %>%
+  group_by(sub_model, is_bad_buy)%>%
+  summarize(n = n()) %>%
+  pivot_wider(names_from = is_bad_buy, values_from = n, values_fill = 0) %>%
+  mutate(n = `0` + `1`,
+         pct_badbuy = round(`1`/n, 3)) %>%
+  arrange(desc(pct_badbuy))
+
+training %>%
+  group_by(color, is_bad_buy)%>%
+  summarize(n = n()) %>%
+  pivot_wider(names_from = is_bad_buy, values_from = n, values_fill = 0) %>%
+  mutate(n = `0` + `1`,
+         pct_badbuy = round(`1`/n, 3)) %>%
+  arrange(desc(pct_badbuy))
+training %>%
+  mutate(is_bad_buy = as.character(is_bad_buy)) %>%
+  ggplot(aes(color, fill = is_bad_buy)) +
+  geom_bar(bins = 20, position = "fill") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Clunker Rate by Color") +
+  ylab("Clunker Rate (%)") +
+  xlab("Color")
+
+training %>%
+  group_by(transmission, is_bad_buy)%>%
+  summarize(n = n()) %>%
+  pivot_wider(names_from = is_bad_buy, values_from = n, values_fill = 0) %>%
+  mutate(n = `0` + `1`,
+         pct_badbuy = round(`1`/n, 3)) %>%
+  arrange(desc(pct_badbuy))
+training %>%
+  mutate(is_bad_buy = as.character(is_bad_buy)) %>%
+  ggplot(aes(transmission, fill = is_bad_buy)) +
+  geom_bar(position = "fill") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Clunker Rate by Transmission Type") +
+  ylab("Clunker Rate (%)") +
+  xlab("Transmission Type")
+
+training %>%
+  group_by(wheel_type_id, is_bad_buy)%>%
+  summarize(n = n()) %>%
+  pivot_wider(names_from = is_bad_buy, values_from = n, values_fill = 0) %>%
+  mutate(n = `0` + `1`,
+         pct_badbuy = round(`1`/n, 3)) %>%
+  arrange(desc(pct_badbuy))
+training %>%
+  mutate(is_bad_buy = as.character(is_bad_buy)) %>%
+  ggplot(aes(wheel_type_id, fill = is_bad_buy)) +
+  geom_bar(bins = 5, position = "fill") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Clunker Rate by Wheel Type ID") +
+  ylab("Clunker Rate (%)") +
+  xlab("Wheel Type ID")
+
+training %>%
+  group_by(wheel_type, is_bad_buy)%>%
+  summarize(n = n()) %>%
+  pivot_wider(names_from = is_bad_buy, values_from = n, values_fill = 0) %>%
+  mutate(n = `0` + `1`,
+         pct_badbuy = round(`1`/n, 3)) %>%
+  arrange(desc(pct_badbuy))
+training %>%
+  mutate(is_bad_buy = as.character(is_bad_buy)) %>%
+  ggplot(aes(wheel_type, fill = is_bad_buy)) +
+  geom_bar(bins = 5, position = "fill") +
+  labs(title = "Clunker Rate by Wheel Type") +
+  ylab("Clunker Rate (%)") +
+  xlab("Wheel Type")
+
+training %>%
+  group_by(vnzip1, is_bad_buy) %>%
+  summarize(n = n()) %>%
+  pivot_wider(names_from = is_bad_buy, values_from = n, values_fill = 0) %>%
+  mutate(n = `0` + `1`,
+         pct_badbuy = round(`1`/n, 3)) %>%
+  arrange(desc(pct_badbuy))
+training %>%
+  mutate(vnzip1 = as.character(vnzip1)) %>%
+  mutate(is_bad_buy = as.character(is_bad_buy)) %>%
+  ggplot(aes(vnzip1, fill = is_bad_buy)) +
+  geom_histogram(stat = "count", position = "fill") +
+  labs(title = "Clunker Rate by and VNZIP1") +
+  ylab("Clunker Rate (%)") +
+  xlab("VNZIP1")
+
+training %>%
+  group_by(is_online_sale, is_bad_buy) %>%
+  summarize(n = n()) %>%
+  pivot_wider(names_from = is_bad_buy, values_from = n, values_fill = 0) %>%
+  mutate(n = `0` + `1`,
+         pct_badbuy = round(`1`/n, 3)) %>%
+  arrange(desc(pct_badbuy))
+training %>%
+  mutate(is_online_sale = as.character(is_online_sale)) %>%
+  mutate(is_bad_buy = as.character(is_bad_buy)) %>%
+  ggplot(aes(is_online_sale, fill = is_bad_buy)) +
+  geom_bar(position = "fill") +
+  labs(title = "Clunker Rate by Online Sales") +
+  ylab("Clunker Rate (%)") +
+  xlab("Online Sale Status (0 = 'no', 1 = 'yes')")
+
+training %>%
+  group_by(nationality, is_bad_buy)%>%
+  summarize(n = n()) %>%
+  pivot_wider(names_from = is_bad_buy, values_from = n, values_fill = 0) %>%
+  mutate(n = `0` + `1`,
+         pct_badbuy = round(`1`/n, 3)) %>%
+  arrange(desc(pct_badbuy))
+training %>%
+  mutate(is_bad_buy = as.character(is_bad_buy)) %>%
+  ggplot(aes(nationality, fill = is_bad_buy)) +
+  geom_bar(bins = 20, position = "fill") +
+  labs(title = "Clunker Rate by Nationality") +
+  ylab("Clunker Rate (%)") +
+  xlab("Nationality")
+
+training %>%
+  group_by(top_three_american_name, is_bad_buy)%>%
+  summarize(n = n()) %>%
+  pivot_wider(names_from = is_bad_buy, values_from = n, values_fill = 0) %>%
+  mutate(n = `0` + `1`,
+         pct_badbuy = round(`1`/n, 3)) %>%
+  arrange(desc(pct_badbuy))
+
+training %>%
+  group_by(size, is_bad_buy)%>%
+  summarize(n = n()) %>%
+  pivot_wider(names_from = is_bad_buy, values_from = n, values_fill = 0) %>%
+  mutate(n = `0` + `1`,
+         pct_badbuy = round(`1`/n, 3)) %>%
+  arrange(desc(pct_badbuy))
+training %>%
+  mutate(is_bad_buy = as.character(is_bad_buy)) %>%
+  ggplot(aes(size, fill = is_bad_buy)) +
+  geom_bar(bins = 20, position = "fill") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Clunker Rate by Size") +
+  ylab("Clunker Rate (%)") +
+  xlab("Size")
+
+training %>%
+  group_by(aucguart, is_bad_buy)%>%
+  summarize(n = n()) %>%
+  pivot_wider(names_from = is_bad_buy, values_from = n, values_fill = 0) %>%
+  mutate(n = `0` + `1`,
+         pct_badbuy = round(`1`/n, 3)) %>%
+  arrange(desc(pct_badbuy))
+training %>%
+  mutate(is_bad_buy = as.character(is_bad_buy)) %>%
+  ggplot(aes(aucguart, fill = is_bad_buy)) +
+  geom_bar(bins = 20, position = "fill") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Clunker Rate by aucguart") +
+  ylab("Clunker Rate (%)") +
+  xlab("aucguart")
+
+training %>%
+  group_by(vnst, is_bad_buy)%>%
+  summarize(n = n()) %>%
+  pivot_wider(names_from = is_bad_buy, values_from = n, values_fill = 0) %>%
+  mutate(n = `0` + `1`,
+         pct_badbuy = round(`1`/n, 3)) %>%
+  arrange(desc(pct_badbuy))
+training %>%
+  mutate(is_bad_buy = as.character(is_bad_buy)) %>%
+  ggplot(aes(vnst, fill = is_bad_buy)) +
+  geom_bar(bins = 52, position = "fill") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Clunker Rate by State") +
+  ylab("Clunker Rate (%)") +
+  xlab("State")
+
+training %>%
+  group_by(quality_code, is_bad_buy)%>%
+  summarize(n = n()) %>%
+  pivot_wider(names_from = is_bad_buy, values_from = n, values_fill = 0) %>%
+  mutate(n = `0` + `1`,
+         pct_badbuy = round(`1`/n, 3)) %>%
+  arrange(desc(pct_badbuy))
+training %>%
+  mutate(is_bad_buy = as.character(is_bad_buy)) %>%
+  ggplot(aes(quality_code, fill = is_bad_buy)) +
+  geom_histogram(stat = "count", position = "fill") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Clunker Rate by Quality Code") +
+  ylab("Clunker Rate (%)") +
+  xlab("Quality Code")
+
+training %>%
+  mutate(is_bad_buy = as.character(is_bad_buy)) %>%
+  ggplot(aes(veh_odo_rand_num, fill = is_bad_buy)) +
+  geom_histogram(bins = 50, position = "fill") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "Clunker Rate by ") +
+  ylab("Clunker Rate (%)") +
+  xlab("")
+```
+
+```{r}
+set.seed(123)
+
+train_test_spit <- initial_split(training_prep, prop = 0.7, strata = is_bad_buy)
+
+train <- training(train_test_spit)
+test <- testing(train_test_spit)
+train_cv_folds <- vfold_cv(train, v = 5)
+
+sprintf("Train PCT : %1.1f%%", nrow(train)/ nrow(training_prep) * 100)
+sprintf("Test PCT : %1.1f%%", nrow(test)/ nrow(training_prep) * 100)
+sprintf("Kfold Count: %d", nrow(train_cv_folds))
+```
+
+```{r, message=FALSE, warning=FALSE}
+recipe <- recipe(is_bad_buy ~ ., data = train) %>%
+  step_impute_mean(all_numeric_predictors()) %>%
+  step_impute_mode(all_nominal_predictors(), -all_outcomes()) %>%
+  step_zv(all_numeric_predictors()) %>%
+  step_dummy(all_nominal_predictors(), -all_outcomes()) %>%
+  step_scale(all_numeric_predictors()) %>%
+  prep()
+  
+recipe
+```
+
+```{r, message=FALSE, warning=FALSE}
+## -- RANDOM FOREST -- 
+
+rf_model <- rand_forest(trees = tune(),
+                        min_n = tune()) %>%
+  set_engine("ranger", importance = "impurity") %>%
+  set_mode("classification") 
+
+rf_workflow <- workflow() %>%
+  add_recipe(recipe) %>%
+  add_model(rf_model)
+
+rf_tune_grid <- grid_random(trees(),
+                            min_n(),
+                            size = 5)
+
+rf_tuning_results <- rf_workflow %>% 
+  tune_grid(
+    resamples = train_cv_folds,
+    grid = rf_tune_grid,
+    metrics = metric_set(roc_auc), model_score,
+    control = control_resamples(save_pred = TRUE)
+    )
+
+rf_tuning_results %>%
+  unnest(.notes) ## use this to debug your model
+
+rf_tuning_results %>%
+  collect_metrics()
+
+rf_tuning_results %>%
+  show_best("roc_auc") %>%
+  print()
+
+rf_best <- rf_tuning_results %>%
+  select_best("roc_auc") 
+
+print(rf_best)
+
+rf_final_wf <- rf_workflow %>% 
+  finalize_workflow(rf_best)
+
+print(rf_final_wf)
+
+rf_final_fit <- rf_final_wf %>%
+  fit(data = train) 
+```
+
+```{r, message=FALSE, warning=FALSE}
+## -- XG BOOST -- 
+# Parallel
+all_cores <- detectCores(logical = TRUE)
+sprintf("# of Logical Cores: %d", all_cores)
+cl <- makeCluster(all_cores)
+registerDoParallel(cl)
+
+set.seed(1000)
+
+xgb_model <- boost_tree(trees = tune(),
+                        tree_depth = tune(),
+                        min_n = tune(),
+                        learn_rate = tune()) %>%
+  set_engine("xgboost") %>%
+  set_mode("classification") 
+
+xgb_workflow <- workflow() %>%
+  add_recipe(recipe) %>%
+  add_model(xgb_model)
+
+xgb_tune_grid <- grid_regular(trees(),
+                              tree_depth(),
+                              min_n(),
+                              learn_rate(),
+                              levels = 2)
+
+print(xgb_tune_grid)
+
+xgb_tuning_results <- xgb_workflow %>% 
+  tune_grid(
+    resamples = train_cv_folds,
+    grid = xgb_tune_grid,
+    metrics = metric_set(roc_auc), model_score,
+    control = control_resamples(save_pred = TRUE)
+    )
+
+xgb_tuning_results %>%
+  unnest(.notes) ## use this to debug your model
+
+xgb_tuning_results %>%
+  collect_metrics() %>%
+  mutate_if(is.numeric, round, 3)
+
+xgb_tuning_results %>%
+  show_best("roc_auc") %>%
+  print()
+
+xgb_best <- xgb_tuning_results %>%
+  select_best("roc_auc") 
+
+print(xgb_best)
+
+xgb_final_wf <- xgb_workflow %>% 
+  finalize_workflow(xgb_best)
+
+print(xgb_final_wf)
+
+xgb_final_fit <- xgb_final_wf %>%
+  fit(data = train) 
+```
+
+## Predictions
+
+```{r, message=FALSE, warning=FALSE}
+predict(rf_final_fit, train) %>%
+  bind_cols(predict(rf_final_fit, train, type = "prob")) %>%
+  bind_cols(train) -> train_scoredrf
+
+predict(rf_final_fit, test) %>%
+  bind_cols(predict(rf_final_fit, test, type = "prob")) %>%
+  bind_cols(test) -> test_scoredrf
+
+predict(xgb_final_fit, train) %>%
+  bind_cols(predict(xgb_final_fit, train, type = "prob"))%>%
+  bind_cols(train) -> train_scoredxgb
+
+predict(xgb_final_fit, test) %>%
+  bind_cols(predict(xgb_final_fit, test, type = "prob")) %>%
+  bind_cols(test) -> test_scoredxgb
+```
+  
+```{r}
+options(yardstick.event_first=FALSE)
+
+train_scoredrf %>%
+  metrics(is_bad_buy, `.pred_1`, estimate = .pred_class) %>%
+  mutate(part = "training") %>%
+  bind_rows(test_scoredrf %>%
+              metrics(is_bad_buy, `.pred_1`, estimate = .pred_class) %>%
+              mutate(part = "testing") ) %>%
+  filter(.metric %in% c('accuracy', 'roc_auc')) %>%
+  pivot_wider(names_from = .metric, values_from = .estimate)
+  
+  # -- variable importance: top 25
+rf_final_fit %>%
+  extract_fit_parsnip() %>%
+  vip(num_features = 25)
+  
+  # -- confusion matrix 
+train_scoredrf %>%
+  conf_mat(is_bad_buy, .pred_class) %>%
+  autoplot(type = "heatmap")
+
+test_scoredrf %>%
+  conf_mat(is_bad_buy, .pred_class) %>%
+  autoplot(type = "heatmap")
+   
+  # -- ROC Charts 
+train_scoredrf %>%
+  mutate(model = "train") %>%
+  bind_rows(test_scoredrf %>%
+              mutate(model = "test")) %>%
+  group_by(model) %>%
+  roc_curve(is_bad_buy, `.pred_1`) %>%
+  autoplot() 
+
+  # -- operating range -- 
+train_scoredrf  %>%
+  roc_curve(is_bad_buy, `.pred_1`) %>%
+  mutate(FPR = round((1 - specificity), 2),
+         TPR = round(sensitivity,3),
+         score_threshold =  1 - round(.threshold, 3)) %>%
+  group_by(FPR) %>%
+  summarise(score_threshold = max(score_threshold),
+            TPR = max(TPR))%>%
+  ungroup() %>%
+  mutate(precision = TPR/(TPR + FPR)) %>%
+  dplyr::select(FPR, TPR, precision, score_threshold) %>%
+  filter(FPR <= 0.1) 
+```
+
+  
+```{r}
+options(yardstick.event_first=FALSE)
+
+train_scoredxgb %>%
+  metrics(is_bad_buy, `.pred_1`, estimate = .pred_class) %>%
+  mutate(part = "training") %>%
+  bind_rows(test_scoredxgb %>%
+              metrics(is_bad_buy, `.pred_1`, estimate = .pred_class) %>%
+              mutate(part = "testing") ) %>%
+  filter(.metric %in% c('accuracy', 'roc_auc')) %>%
+  pivot_wider(names_from = .metric, values_from = .estimate)
+  
+  # -- variable importance: top 25
+xgb_final_fit %>%
+  extract_fit_parsnip() %>%
+  vip(num_features = 25)
+  
+  # -- confusion matrix 
+train_scoredxgb %>%
+  conf_mat(is_bad_buy, .pred_class) %>%
+  autoplot(type = "heatmap")
+
+test_scoredxgb %>%
+  conf_mat(is_bad_buy, .pred_class) %>%
+  autoplot(type = "heatmap")
+   
+  options(yardstick.event_first=FALSE)
+  # -- ROC Charts 
+train_scoredxgb %>%
+  mutate(model = "train") %>%
+  bind_rows(test_scoredxgb %>%
+              mutate(model = "test")) %>%
+  group_by(model) %>%
+  roc_curve(is_bad_buy, `.pred_1`) %>%
+  autoplot() 
+
+  # -- operating range -- 
+train_scoredxgb  %>%
+  roc_curve(is_bad_buy, `.pred_1`) %>%
+  mutate(FPR = round((1 - specificity), 2),
+         TPR = round(sensitivity,3),
+         score_threshold =  1 - round(.threshold, 3)) %>%
+  group_by(FPR) %>%
+  summarise(score_threshold = max(score_threshold),
+            TPR = max(TPR))%>%
+  ungroup() %>%
+  mutate(precision = TPR/(TPR + FPR)) %>%
+  dplyr::select(FPR, TPR, precision, score_threshold) %>%
+  filter(FPR <= 0.1) 
+```
+
+```{r}
+options(yardstick.event_first = FALSE)
+model_score <- function(training_prep, model, model_name) {
+  scored_df <- predict(model, training_prep, type = "prob") %>%
+    bind_cols(., predict(model, training_prep)) %>%
+    bind_cols(training_prep) %>%
+    mutate(model_name = model_name)
+  
+  return(scored_df)
+}
+train_scoredxgb <- model_score(train, xgb_final_fit, "xgboost training" )
+test_scoredxgb <- model_score(test, xgb_final_fit, "xgboost testing" )
+```
+
+```{r}
+train_scoredrf <- model_score(train, rf_final_fit, "random forest training")
+test_scoredrf <- model_score(test, rf_final_fit, "random forest testing")
+```
+
+## -- XGB Preds -- 
+
+```{r}
+options(yardstick.event_first = FALSE)
+# -- Metrics: Train and Test -- 
+bind_rows(train_scoredxgb, test_scoredxgb) %>% 
+  group_by(model_name) %>%
+  metrics(is_bad_buy, .pred_1, estimate = .pred_class) %>%
+  pivot_wider(id = c(model_name), names_from = .metric, values_from = .estimate) %>%
+  mutate(misclassification_rate = 1 - accuracy)
+
+# -- ROC Chart -- 
+bind_rows(train_scoredxgb, test_scoredxgb) %>% 
+  group_by(model_name) %>%
+  roc_curve(is_bad_buy, .pred_1) %>%
+  autoplot() +
+  geom_vline(xintercept = 0.12, color = "red") +
+  labs(title = "XGB ROC Chart")
+
+precision(train_scoredxgb, is_bad_buy, .pred_class)
+recall(test_scoredxgb, is_bad_buy, .pred_class)
+```
+
+## -- RF Preds -- 
+
+```{r}
+options(yardstick.event_first = FALSE)
+# -- Metrics: Train and Test -- 
+
+bind_rows(train_scoredrf, test_scoredrf) %>% 
+  group_by(model_name) %>%
+  metrics(is_bad_buy, .pred_1, estimate = .pred_class) %>%
+  pivot_wider(id = c(model_name), names_from = .metric, values_from = .estimate) %>%
+  mutate(misclassification_rate = 1 - accuracy)
+
+# -- ROC Chart -- 
+bind_rows(train_scoredrf, test_scoredrf) %>% 
+  group_by(model_name) %>%
+  roc_curve(is_bad_buy, .pred_1) %>%
+  autoplot() +
+  geom_vline(xintercept = 0.06, color = "red") +
+  labs(title = "RF ROC Chart")
+
+precision(train_scoredrf, is_bad_buy, .pred_class)
+recall(test_scoredrf, is_bad_buy, .pred_class)
+```
+
+## -- Kaggle Prep --
+
+```{r}
+kaggle <- kaggle %>%
+  left_join(make_freq) %>%
+  dplyr::select(-make) %>%
+  left_join(model_freq) %>%
+  dplyr::select(-model) %>%
+  left_join(sub_model_freq) %>%
+  dplyr::select(-sub_model) %>%
+  left_join(trim_freq) %>%
+  dplyr::select(-trim) %>%
+  left_join(vnst_freq) %>%
+  dplyr::select(-vnst) %>%
+  left_join(color_freq) %>%
+  dplyr::select(-color) %>%
+  left_join(size_freq) %>%
+  dplyr::select(-size) %>%
+  left_join(quality_code_freq) %>%
+  dplyr::select(-quality_code)
+```
+
+```{r}
+kaggle %>%
+  mutate_if(is.character, as.factor) %>%
+  dplyr::select(-purch_date)
+```
+
+```{r, warning=FALSE, message=FALSE}
+#Kaggle Submission
+
+## -- Score Kaggle
+predict(rf_final_fit, kaggle, type = "prob") %>%
+  bind_cols(predict(rf_final_fit, kaggle, type = "class")) %>%
+  bind_cols(., kaggle) -> holdout_score
+
+skim(holdout_score)
+
+#Submit to kaggle as CSV
+kaggle <- holdout_score %>%
+  dplyr::select(id, IsBadBuy = .pred_1)
+
+write_csv(kaggle, "Project_4_Preds_TylerGrosman.csv")
+```

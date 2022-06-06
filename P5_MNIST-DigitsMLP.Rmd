@@ -1,0 +1,547 @@
+---
+title: "Project 5 - BAN 6053: Introduction to Machine Learning"
+author: Tyler Grosman
+output: html_notebook
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(pROC)
+library(caret)
+library(tidyverse)
+library(lubridate)
+library(janitor)
+library(skimr)
+library(lubridate)
+library(tidyquant)
+library(tidymodels)
+library(ranger)
+library(topicmodels)
+library(readr)
+library(dplyr)
+library(tidytext)
+library(readxl)
+library(devtools)
+library(Rcpp)
+library(vip)
+library(ggplot2)
+library(ggthemes)
+library(corrplot)
+library(corrr)
+library(MASS)
+library(VIF)
+library(vip)
+library(fastDummies)
+library(kableExtra)
+library(GGally)
+library(kableExtra)
+library(parallel)
+library(doParallel)
+library(fastshap)
+library(rpart.plot)
+library(ggpubr)
+library(imputeTS)
+library(xgboost)
+library(glmnet) 
+library(rpart.plot) 
+library(reshape2)
+library(textrecipes)
+library(stopwords)
+library(tensorflow)
+library(embed)
+library(nnet)
+
+```
+
+```{r}
+#setwd("C:/Users/tyler/OneDrive/Documents/Projects_and_homework/MSBA Fall 2021/BAN 6053 Intro. to Machine Learning/Project 5")
+```
+
+```{r}
+digit_train <- read_csv("digit_train.csv") %>%
+  clean_names() %>%
+  mutate(label = as_factor(label))
+
+digit_holdout <- read_csv("digit_holdout.csv") %>%
+  clean_names()
+
+digit_holdout_scaled <- digit_holdout %>%
+  mutate_if(is.numeric, funs(./255)) 
+
+digit_train_scaled <- digit_train %>%
+  mutate_if(is.numeric, funs(./255)) 
+
+head(digit_train_scaled)
+head(digit_holdout_scaled)
+```
+
+```{r}
+set.seed(123)
+
+train_test_spit <- initial_split(digit_train, prop = 0.7)
+
+train <- training(train_test_spit)
+test <- testing(train_test_spit)
+
+train_scaled <- train %>%
+   mutate_if(is.numeric, funs(./255)) 
+ 
+test_scaled <- test %>%
+   mutate_if(is.numeric, funs(./255))
+
+train_cv_folds <- vfold_cv(train_scaled, v = 5)
+
+#sprintf("Train PCT : %1.1f%%", nrow(train_scaled)/nrow(train_scaled) * 100)
+#sprintf("Test PCT : %1.1f%%", nrow(test_scaled)/nrow(train_scaled) * 100)
+#sprintf("Kfold Count: %d", nrow(cv_folds_scaled))
+
+```
+
+
+## -- RECIPE -- 
+
+```{r}
+recipe1 <- recipe(label ~ ., train_scaled) %>%
+  update_role(id, new_role = "ignore")
+```
+
+## -- MLP Model --
+
+```{r}
+mlp_model <- mlp(epochs = tune(),
+                 dropout = tune(),
+                 hidden_units = tune()) %>%
+  set_engine("nnet", MaxNWts = 200000) %>%
+  set_mode("classification")
+
+mlp_wf <- workflow() %>%
+  add_recipe(recipe1) %>%
+  add_model(mlp_model)
+
+#mlp_final_fit <- mlp_wf %>%
+#  fit(data = train_scaled)
+```
+
+## -- MLP Tuning -- 
+
+fit_control <- trainControl(method = "repeatedcv", 
+                           number = 10, 
+                           repeats = 5, 
+                           classProbs = TRUE, 
+                           summaryFunction = multipleClassification) # fix = Classification if necessary and change engine to "keras"
+```{r}
+mlp_grid <- grid_random(epochs(),
+                        dropout(),
+                        hidden_units(),
+                        size = 5)
+
+mlp_tuning_results <- mlp_wf %>%
+  tune_grid(
+    resamples = cv_folds_scaled,
+    grid = mlp_grid,
+    metrics = metric_set(roc_auc),
+    control = control_resamples(save_pred = TRUE)
+    )
+
+mlp_tuning_results %>%
+  unnest(.notes) ## use this to debug your model
+
+mlp_tuning_results %>%
+  collect_metrics() %>%
+  mutate_if(is.numeric, round, 3)
+
+mlp_tuning_results %>%
+  show_best("roc_auc") %>%
+  print()
+
+mlp_best <- mlp_tuning_results %>%
+  select_best("roc_auc") 
+
+print(mlp_best)
+
+mlp_final_wf <- mlp_wf %>% 
+  finalize_workflow(mlp_best)
+
+print(mlp_final_wf2)
+
+mlp_final_fit2 <- mlp_final_wf %>%
+  fit(data = train_scaled) 
+```
+
+mlp_fit <- fit(label ~ ., 
+                 data = train_scaled,
+                 method = "nnet",
+                 tuneLength = 5,
+                 metric = "accuracy",
+                 trControl = fit_control,
+                 tuneGrid = mlp_grid,
+                 verbose = FALSE)
+
+```{r}
+#thinLeaves = TRUE
+```
+
+## -- RANDOM FOREST -- 
+
+```{r}
+rf_model <- rand_forest(trees = tune(),
+                        min_n = tune()) %>%
+  set_engine("ranger", importance = "permutation") %>% 
+  set_mode("classification")
+
+rf_wf <- workflow() %>% 
+  add_recipe(recipe1) %>%
+  add_model(rf_model)
+
+rf_tune_grid <- grid_random(trees(),
+                            min_n(),
+                            size = 5)
+
+rf_tuning_results <- rf_wf %>% 
+  tune_grid(
+    resamples = train_cv_folds,
+    grid = rf_tune_grid,
+    metrics = metric_set(roc_auc),
+    control = control_resamples(save_pred = TRUE)
+    )
+
+rf_tuning_results %>%
+  unnest(.notes) ## use this to debug your model
+
+rf_tuning_results %>%
+  collect_metrics()
+
+rf_tuning_results %>%
+  show_best("roc_auc") %>%
+  print()
+
+rf_best <- rf_tuning_results %>%
+  select_best("roc_auc") 
+
+print(rf_best)
+
+rf_final_wf <- rf_wf %>% 
+  finalize_workflow(rf_best)
+
+print(rf_final_wf)
+
+rf_final_fit <- rf_final_wf %>%
+  fit(data = train_scaled)
+```
+
+## -- XGB --
+
+```{r}
+all_cores <- detectCores(logical = TRUE)
+sprintf("# of Logical Cores: %d", all_cores)
+cl <- makeCluster(all_cores)
+registerDoParallel(cl)
+
+set.seed(1000)
+
+xgb_model <- boost_tree(trees = tune(),
+                        tree_depth = tune(),
+                        min_n = tune(),
+                        learn_rate = tune()) %>%
+  set_engine("xgboost") %>%
+  set_mode("classification")
+
+xgb_workflow <- workflow() %>%
+  add_recipe(recipe1) %>%
+  add_model(xgb_model)
+
+xgb_tune_grid <- grid_random(trees(),
+                             tree_depth(),
+                             min_n(),
+                             learn_rate(),
+                             size = 5)
+
+print(xgb_tune_grid)
+
+xgb_tuning_results <- xgb_workflow %>% 
+  tune_grid(
+    resamples = train_cv_folds,
+    grid = xgb_tune_grid,
+    metrics = metric_set(roc_auc),
+    control = control_resamples(save_pred = TRUE)
+    )
+
+xgb_tuning_results %>%
+  unnest(.notes)
+
+xgb_tuning_results %>%
+  collect_metrics
+  mutate_if(is.numeric, round, 3)
+
+xgb_tuning_results %>%
+  show_best("roc_auc") %>%
+  print()
+
+xgb_best <- xgb_tuning_results %>%
+  select_best("roc_auc") 
+
+print(xgb_best)
+
+xgb_final_wf <- xgb_workflow %>% 
+  finalize_workflow(xgb_best)
+
+print(xgb_final_wf)
+
+xgb_final_fit <- xgb_final_wf %>%
+  fit(data = train) 
+```
+
+## Predictions
+
+```{r, message=FALSE, warning=FALSE}
+predict(rf_final_fit, train_scaled) %>%
+  bind_cols(predict(rf_final_fit, train_scaled, type = "prob")) %>%
+  bind_cols(train_scaled) -> train_scored_rf
+
+predict(rf_final_fit, test) %>%
+  bind_cols(predict(rf_final_fit, test_scaled, type = "prob")) %>%
+  bind_cols(test_scaled) -> test_scored_rf
+
+predict(xgb_final_fit, train_scaled) %>%
+  bind_cols(predict(xgb_final_fit, train_scaled, type = "prob"))%>%
+  bind_cols(train_scaled) -> train_scored_xgb
+
+predict(xgb_final_fit, test_scaled) %>%
+  bind_cols(predict(xgb_final_fit, test_scaled, type = "prob")) %>%
+  bind_cols(test_scaled) -> test_scored_xgb
+
+predict(mlp_final_fit, train_scaled) %>%
+  bind_cols(predict(mlp_final_fit, train_scaled, type = "prob"))%>%
+  bind_cols(train_scaled) -> train_scored_mlp
+
+predict(mlp_final_fit, test_scaled) %>%
+  bind_cols(predict(mlp_final_fit, test_scaled, type = "prob")) %>%
+  bind_cols(test_scaled) -> test_scored_mlp
+```
+
+```{r}
+theme_set(theme_light())
+theme_set(theme_light())
+
+image_check <- function(label_id, mlp_final_fit){
+  predict(mlp_final_fit, test_scaled, type="class") %>%
+    bind_cols(., test_scaled)-> scored_test
+
+pixels_gathered <- scored_test %>%
+  filter(label == label_id) %>% # cycle through examples 
+  filter(label != .pred_class) %>%
+  dplyr::select(starts_with("x"), label, .pred_class ) %>%
+  head(50) %>%
+  mutate(instance = row_number()) %>%
+  gather(pixel, value, -label, -instance, -.pred_class) %>%
+  tidyr::extract(pixel, "pixel", "(\\d+)", convert = TRUE) %>%
+  mutate(pixel = pixel - 2,
+         x = pixel %% 28,
+         y = 28 - pixel %/% 28)
+
+pixels_gathered$label <- factor(pixels_gathered$label,
+levels = c(0,1,2,3,4,5,6,7,8,9))
+
+pixels_gathered$.pred_class <- factor(pixels_gathered$.pred_class,
+levels = c(0,1,2,3,4,5,6,7,8,9))
+
+pixels_gathered %>%
+  ggplot(aes(x, y, fill = value)) +
+  geom_raster() +
+   scale_fill_gradient(low = "white", high = "black", na.value = NA) + 
+  facet_wrap(~ label + .pred_class) 
+  
+}
+
+for (i in range(0:9)){
+  p <- image_check(i, mlp_final_fit)
+  print(p)
+}
+```
+
+```{r}
+theme_set(theme_light())
+theme_set(theme_light())
+
+predict(mlp_final_fit, test_scaled,type="class") %>%
+    bind_cols(., test_scaled) -> scored_test1
+
+pixels_gathered <- scored_test1 %>%
+  filter(label != .pred_class) %>%
+  dplyr::select(starts_with("x"), label, .pred_class ) %>%
+  head(12) %>%
+  mutate(instance = row_number()) %>%
+  gather(pixel, value, -label, -instance, -.pred_class) %>%
+  tidyr::extract(pixel, "pixel", "(\\d+)", convert = TRUE) %>%
+  mutate(pixel = pixel - 2,
+         x = pixel %% 28,
+         y = 28 - pixel %/% 28)
+
+
+pixels_gathered$label <- factor(pixels_gathered$label,
+levels = c(0,1,2,3,4,5,6,7,8,9),
+labels = c("0", "1", "2", "3", "4", "5", "6", "7", "8", "9"))
+
+pixels_gathered$.pred_class <- factor(pixels_gathered$.pred_class,
+levels = c(0,1,2,3,4,5,6,7,8,9),
+labels = c("0", "1", "2", "3", "4", "5", "6", "7", "8", "9"))
+
+pixels_gathered %>%
+  ggplot(aes(x, y, fill = value)) +
+  geom_raster() +
+  scale_fill_gradient(low = "white", high = "black", na.value = NA) + 
+  facet_wrap(~ label + .pred_class) 
+```
+
+  
+```{r}
+options(yardstick.event_first=FALSE)
+
+  # -- RF confusion matrix 
+train_scored_rf %>%
+  conf_mat(label, .pred_class) %>%
+  autoplot(type = "heatmap")
+
+test_scored_rf %>%
+  conf_mat(label, .pred_class) %>%
+  autoplot(type = "heatmap")
+
+  # -- XGB confusion matrix 
+train_scored_xgb %>%
+  conf_mat(label, .pred_class) %>%
+  autoplot(type = "heatmap")
+
+test_scored_xgb %>%
+  conf_mat(label, .pred_class) %>%
+  autoplot(type = "heatmap")
+
+  # -- MLP confusion matrix 
+train_scored_mlp %>%
+  conf_mat(label, .pred_class) %>%
+  autoplot(type = "heatmap")
+
+test_scored_mlp %>%
+  conf_mat(label, .pred_class) %>%
+  autoplot(type = "heatmap")
+   
+```
+
+```{r}
+options(yardstick.event_first = FALSE)
+model_score <- function(train_scaled, model, model_name) {
+  scored_df <- predict(model, train_scaled, type = "prob") %>%
+    bind_cols(., predict(model, train_scaled)) %>%
+    bind_cols(train_scaled) %>%
+    mutate(model_name = model_name) -> results
+  print(results)
+}
+```
+
+## -- XGB Preds -- 
+
+```{r}
+options(yardstick.event_first = FALSE)
+# -- Metrics: Train and Test -- 
+
+precision(train_scored_xgb, label, .pred_class)
+recall(test_scored_xgb, label, .pred_class)
+
+precision(train_scored_rf, label, .pred_class)
+recall(test_scored_rf, label, .pred_class)
+
+precision(train_scored_mlp, label, .pred_class)
+recall(test_scored_mlp, label, .pred_class)
+
+```
+
+
+```{r}
+predict(mlp_wf, digit_holdout, type = "prob") %>%
+  bind_cols(predict(mlp_wf, digit_holdout, type = "class")) %>%
+  bind_cols(., digit_holdout) -> holdout_score_mlp
+
+kaggle <- holdout_score_mlp %>%
+  dplyr::select(id, label = .pred_class)
+
+write_csv(kaggle_mlp, "Project_5_MLP_Preds_TylerGrosman.csv")
+```
+
+```{r}
+predict(rf_final_fit, digit_holdout_scaled, type = "prob") %>%
+  bind_cols(predict(rf_final_fit, digit_holdout_scaled, type = "class")) %>%
+  bind_cols(., digit_holdout) -> holdout_score_rf
+
+kaggle_rf<- holdout_score_rf %>%
+  dplyr::select(id, label = .pred_class)
+
+write_csv(kaggle_rf, "Project_5_RF_Preds_TylerGrosman.csv")
+```
+
+```{r}
+predict(xgb_final_fit, digit_holdout_scaled, type = "prob") %>%
+  bind_cols(predict(xgb_final_fit, digit_holdout_scaled, type = "class")) %>%
+  bind_cols(., digit_holdout) -> holdout_score_xgb
+
+kaggle_xgb <- holdout_score_xgb %>%
+  dplyr::select(id, label = .pred_class)
+
+write_csv(kaggle_xgb, "Project_5_XGB_Preds_TylerGrosman.csv")
+```
+
+```{r}
+accuracy_score <- function(train_scaled, test_scaled, model_name) {
+  train_scaled %>%
+  bind_rows(test_scaled) %>%
+  group_by(model_name) %>%
+    metrics(label, estimate = .pred_class) %>%
+  filter(.metric == "accuracy") %>%
+  spread(.metric, .estimate) %>%
+  dplyr::select(-.estimator) -> results1
+  print(results1)
+}
+
+heat_map <- function(df){
+  df %>%
+  conf_mat(label, .pred_class) %>%
+    autoplot(type = "heatmap") -> h
+  print(h)
+}
+
+```
+
+```{r}
+train_scored_mlp <- model_score(train_scaled, mlp_final_fit, "mlp training")
+test_scored_mlp <- model_score(test_scaled, mlp_final_fit, "mlp testing")
+```
+
+```{r}
+train_scored_rf <- model_score(train_scaled, rf_final_fit, "random forest training")
+test_scored_rf <- model_score(test_scaled, rf_final_fit, "random forest testing")
+```
+
+```{r}
+train_scored_xgb <- model_score(train_scaled, xgb_final_fit, "xgb training")
+test_scored_xgb <- model_score(test_scaled, xgb_final_fit, "xgb testing")
+```
+
+```{r}
+accuracy_score(train_scored_mlp, test_scored_mlp)
+accuracy_score(train_scored_rf, test_scored_rf)
+accuracy_score(train_scored_xgb, test_scored_xgb)
+```
+
+```{r}
+heat_map(train_scored_mlp)
+heat_map(test_scored_mlp)
+
+heat_map(train_scored_rf)
+heat_map(test_scored_rf)
+
+heat_map(train_scored_xgb)
+heat_map(test_scored_xgb)
+```
+
+

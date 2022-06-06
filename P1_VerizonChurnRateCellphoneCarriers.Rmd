@@ -1,0 +1,886 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r, message=FALSE, warning=FALSE}
+library(pROC)
+library(caret)
+library(tidyverse)
+library(lubridate)
+library(janitor)
+library(skimr)
+library(lubridate)
+library(RSocrata)
+library(tidyquant)
+library(tidymodels)
+library(ranger)
+library(topicmodels)
+library(readr)
+library(tidyverse)
+library(lubridate)
+library(dplyr)
+library(tidytext)
+library(rtweet)
+library(readxl)
+library(janitor)
+library(devtools)
+library(Rcpp)
+library(vip)
+library(ggplot2)
+library(corrplot)
+library(corrr)
+library(MASS)
+library(VIF)
+library(vip)
+library(fastDummies)
+library(kableExtra)
+library(GGally)
+library(kableExtra)
+library(parallel)
+library(doParallel)
+library(fastshap)
+library(rpart.plot)
+library(ggpubr)
+library(glmnet)     #lasso and regularization 
+library(rpart.plot) #plotting decision trees 
+library(reshape2)
+```
+
+```{r}
+churn_training <- read_csv("Churn_training.csv", show_col_types = FALSE) %>%
+  clean_names() %>%
+  mutate(churn = as_factor(churn)) %>%
+  mutate_if(is.character, as_factor)
+churn_training %>%
+  head()
+
+churn_holdout <- read_csv("Churn_holdout.csv") %>%
+  clean_names() %>%
+  mutate_if(is.character, as_factor)
+churn_holdout %>%
+  head()
+```
+
+```{r}
+skim_without_charts(churn_training)
+skim_without_charts(churn_holdout)
+```
+
+## Target Exploration 
+
+```{r}
+churn_training %>%
+  count(churn) %>%
+  mutate(pct = n/sum(n)) -> churn_rate
+
+churn_rate
+
+churn_training %>%
+  group_by(churn) %>%
+  summarise(n = n()) %>%
+  mutate(pct = n/sum(n)) -> churn_rate
+
+churn_training_plot <- ggtexttable(churn_rate, rows = NULL, 
+                        theme = ttheme("mOrange"))
+
+churn_rate %>%
+  ggplot(aes(x = churn, y = n)) +
+  geom_col() + labs("Churn Target Counts") -> p1
+
+churn_rate %>%
+  ggplot(aes(x = churn , y = pct)) +
+  geom_col() + labs(title = "Churn Target") -> p2
+
+ggarrange(p2, churn_training_plot, 
+          ncol = 1, nrow = 2,
+          heights = c(1, 0.3))
+
+churn_cormat <- churn_training %>%
+  mutate(churn = as.numeric(churn)) %>%
+  select_if(is.numeric) %>%
+  na.omit() %>%
+  cor() %>%
+  round(digits = 4) %>%
+  melt()
+
+churn_cormat %>%
+  ggplot(aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient2(mid = "#FBFEF9",low = "#A63446",high = "#0C6291") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  geom_text(aes(label = round(value, 3)), color = "blue")  
+```
+
+## Variable Exploration
+
+```{r}
+churn_training %>%
+  mutate(churn = as.character(churn)) %>%
+  ggplot(aes(monthly_minutes, fill = churn)) +
+  geom_histogram(bins = 25, position = "fill") +
+  labs(title = "monthly_minutes & churn") +
+  ylab("pct") +
+  xlab("monthly_minutes")
+
+churn_training %>%
+  mutate(churn = as.character(churn)) %>%
+  ggplot(aes(x = customer_service_calls, fill = churn)) +
+  geom_bar() +
+  labs(title = "customer_service_calls & churn") +
+  ylab("Count") +
+  xlab("customer_service_calls")
+
+churn_training %>%
+  mutate(churn = as.character(churn)) %>%
+  ggplot(aes(streaming_minutes, fill = churn)) +
+  geom_histogram(bins = 25, position = "fill") +
+  labs(title = "distribution of streaming_minutes & churn") +
+  ylab("pct") +
+  xlab("streaming_minutes")
+
+churn_training %>%
+  mutate(churn = as.character(churn)) %>%
+  ggplot(aes(total_billed, fill = churn)) +
+  geom_histogram(bins = 75, position = "fill") +
+  labs(title = "distribution of total_billed & churn") +
+  ylab("Count") +
+  xlab("total_billed")
+
+churn_training %>%
+  mutate(churn = as.character(churn)) %>%
+  ggplot(aes(prev_balance, fill = churn)) +
+  geom_histogram(bins = 50, position = "fill") +
+  labs(title = "distribution of prev_balance & churn") +
+  ylab("Count") +
+  xlab("prev_balance")
+
+churn_training %>%
+  mutate(churn = as.character(churn)) %>%
+  ggplot(aes(late_payments, fill = churn)) +
+  geom_histogram(bins = 10, postion = "fill") +
+  labs(title = "distribution of late_payments & churn") +
+  ylab("Count") +
+  xlab("late_payments")
+
+churn_training %>%
+  mutate(churn = as.character(churn)) %>%
+  ggplot(aes(phone_area_code, fill = churn)) +
+  geom_histogram(bins = 50, position = "fill") +
+  labs(title = "distribution of phone_area_code & churn") +
+  ylab("Count") +
+  xlab("phone_area_code")
+
+churn_training %>%
+  mutate(churn = as.character(churn)) %>%
+  ggplot(aes(x = number_phones, fill = churn)) +
+  geom_histogram(bins = 10, position = "fill") +
+  labs(title = "distribution of number_phones & churn") +
+  ylab("Count") +
+  xlab("number_phones")
+
+churn_training %>%
+  mutate(churn = as.character(churn)) %>%
+  ggplot(aes(x = senior_citizen, fill = churn)) +
+  geom_bar() +
+  labs(title = "distribution of senior_citizen & churn") +
+  ylab("Count") +
+  xlab("senior_citizen")
+```
+
+## Scatterplots
+
+```{r}
+churn_training %>%
+  mutate(churn = as.character(churn)) %>%
+  ggplot(aes(x = total_billed, y = streaming_minutes, color = churn)) +
+  geom_point()
+
+churn_training %>%
+  mutate(churn = as.character(churn)) %>%
+  ggplot(aes(x = customer_service_calls, y = number_phones, color = churn)) +
+  geom_point() 
+
+churn_training %>%
+  mutate(churn = as.character(churn)) %>%
+  ggplot(aes(x = streaming_minutes, y = prev_balance, color = churn)) +
+  geom_point() 
+
+churn_training %>%
+  mutate(churn = as.character(churn)) %>%
+  ggplot(aes(x = streaming_minutes, y = monthly_minutes, color = churn)) +
+  geom_point() 
+
+churn_training %>%
+  mutate(churn = as.character(churn)) %>%
+  ggplot(aes(x = total_billed, y = prev_balance, color = churn)) +
+  geom_point() 
+```
+
+## Categorical Data 
+
+```{r}
+churn_training %>%
+  group_by(phone_model, churn) %>%
+  summarise(n = n())  %>%
+  pivot_wider(names_from = churn, values_from = n, values_fill = 0) %>%
+  mutate(n = `0` + `1`,
+         pct_churn = round(`1`/n, 3)) %>%
+  arrange(desc(pct_churn)) -> frequency_table_phone_model
+
+frequency_table_phone_model
+
+churn_training %>%
+  group_by(phone_model, churn) %>%
+  summarise(n = n()) %>%
+  ggplot(aes(y = phone_model, x = n, fill = churn)) + 
+  geom_col()
+
+churn_training %>%
+  group_by(phone_model, churn) %>%
+  summarise(n = n()) %>%
+  mutate(pct = n/sum(n)) %>%
+  ggplot(aes(y = reorder(phone_model, pct), x = n, fill = churn)) + 
+  geom_col(position = "fill") 
+```
+
+## Email Domain
+
+```{r}
+churn_training %>%
+  group_by(email_domain, churn) %>%
+  summarise(n = n())  %>%
+  pivot_wider(names_from = churn, values_from = n, values_fill = 0) %>%
+  mutate(n = `0` + `1`,
+         pct_churn = round(`1`/n, 3)) %>%
+  arrange(desc(pct_churn)) -> frequency_table
+
+frequency_table
+
+churn_training %>%
+  group_by(email_domain, churn) %>%
+  summarise(n = n()) %>%
+  ggplot(aes(y = email_domain, x = n, fill = churn)) + 
+  geom_col()
+
+churn_training %>%
+  group_by(email_domain, churn) %>%
+  summarise(n = n()) %>%
+  mutate(pct = n/sum(n)) %>%
+  ggplot(aes(y = reorder(email_domain, pct), x = n, fill = churn)) + 
+  geom_col(position = "fill")
+```
+
+## Billing Postal (NOT significant)
+
+```{r}
+churn_training %>%
+  group_by(billing_postal, churn) %>%
+  summarise(n = n())  %>%
+  pivot_wider(names_from = churn, values_from = n, values_fill = 0) %>%
+  mutate(n = `0` + `1`,
+         pct_churn = round(`1`/n, 3)) %>%
+  arrange(desc(pct_churn)) -> frequency_table_postal
+
+frequency_table_postal
+
+churn_training %>%
+  group_by(billing_postal, churn) %>%
+  summarise(n = n()) %>%
+  ggplot(aes(y = billing_postal, x = n, fill = churn)) + 
+  geom_col()
+
+churn_training %>%
+  group_by(billing_postal, churn) %>%
+  summarise(n = n()) %>%
+  mutate(pct = n/sum(n)) %>%
+  ggplot(aes(y = reorder(billing_postal, pct), x = n, fill = churn)) + 
+  geom_col(position = "fill") 
+
+```
+
+## Billing State (POSSIBLY significant)
+
+```{r}
+churn_training %>%
+  group_by(billing_state, churn) %>%
+  summarise(n = n())  %>%
+  pivot_wider(names_from = churn, values_from = n, values_fill = 0) %>%
+  mutate(n = `0` + `1`,
+         pct_churn = round(`1`/n, 3)) %>%
+  arrange(desc(pct_churn)) -> frequency_table_state
+
+frequency_table_state
+
+churn_training %>%
+  group_by(billing_state, churn) %>%
+  summarise(n = n()) %>%
+  ggplot(aes(y = billing_state, x = n, fill = churn)) + 
+  geom_col()
+
+churn_training %>%
+  group_by(billing_state, churn) %>%
+  summarise(n = n()) %>%
+  mutate(pct=n/sum(n)) %>%
+  ggplot(aes(y = reorder(billing_state, pct), x = n, fill = churn)) + 
+  geom_col(position="fill") 
+```
+
+## Streaming Plan
+
+```{r}
+churn_training %>%
+  group_by(streaming_plan, churn) %>%
+  summarise(n = n())  %>%
+  pivot_wider(names_from = churn, values_from = n, values_fill = 0) %>%
+  mutate(n = `0` + `1`,
+         pct_churn = round(`1`/n, 3)) %>%
+  arrange(desc(pct_churn)) -> frequency_table_streaming_plan
+
+frequency_table_streaming_plan
+
+churn_training %>%
+  group_by(streaming_plan, churn) %>%
+  summarise(n = n()) %>%
+  ggplot(aes(y = streaming_plan, x = n, fill = churn)) + 
+  geom_col()
+
+churn_training %>%
+  group_by(streaming_plan, churn) %>%
+  summarise(n = n()) %>%
+  mutate(pct=n/sum(n)) %>%
+  ggplot(aes(y = reorder(streaming_plan, pct), x = n, fill = churn)) + 
+  geom_col(position = "fill") 
+```
+
+## Mobile Hotspot (NOT significant)
+
+```{r}
+churn_training %>%
+  group_by(mobile_hotspot, churn) %>%
+  summarise(n = n())  %>%
+  pivot_wider(names_from = churn, values_from = n, values_fill = 0) %>%
+  mutate(n = `0` + `1`,
+         pct_churn = round(`1`/n, 3)) %>%
+  arrange(desc(pct_churn)) -> frequency_table_hotspot
+
+frequency_table_hotspot
+
+churn_training %>%
+  group_by(mobile_hotspot, churn) %>%
+  summarise(n = n()) %>%
+  ggplot(aes(y = mobile_hotspot, x = n, fill = churn)) + 
+  geom_col()
+
+churn_training %>%
+  group_by(mobile_hotspot, churn) %>%
+  summarise(n = n()) %>%
+  mutate(pct = n/sum(n)) %>%
+  ggplot(aes(y = reorder(mobile_hotspot, pct), x = n, fill = churn)) + 
+  geom_col(position = "fill")
+```
+
+## Wifi Calling & Text (NOT significant)
+
+```{r}
+churn_training %>%
+  group_by(wifi_calling_text, churn) %>%
+  summarise(n = n())  %>%
+  pivot_wider(names_from = churn, values_from = n, values_fill = 0) %>%
+  mutate(n = `0` + `1`,
+         pct_churn = round(`1`/n, 3)) %>%
+  arrange(desc(pct_churn)) -> frequency_table_wct
+
+frequency_table_wct
+
+churn_training %>%
+  group_by(wifi_calling_text, churn) %>%
+  summarise(n = n()) %>%
+  ggplot(aes(y = wifi_calling_text, x = n, fill = churn)) + 
+  geom_col()
+
+churn_training %>%
+  group_by(wifi_calling_text, churn) %>%
+  summarise(n = n()) %>%
+  mutate(pct = n/sum(n)) %>%
+  ggplot(aes(y = reorder(wifi_calling_text, pct), x = n, fill = churn)) + 
+  geom_col(position = "fill") 
+```
+
+## Device Protection
+
+```{r}
+churn_training %>%
+  group_by(device_protection, churn) %>%
+  summarise(n = n())  %>%
+  pivot_wider(names_from = churn, values_from = n, values_fill = 0) %>%
+  mutate(n = `0` + `1`,
+         pct_churn = round(`1`/n, 3)) %>%
+  arrange(desc(pct_churn)) -> frequency_table_protection
+
+frequency_table_protection
+
+churn_training %>%
+  group_by(device_protection, churn) %>%
+  summarise(n = n()) %>%
+  ggplot(aes(y = device_protection, x = n, fill = churn)) + 
+  geom_col()
+
+churn_training %>%
+  group_by(device_protection, churn) %>%
+  summarise(n = n()) %>%
+  mutate(pct = n/sum(n)) %>%
+  ggplot(aes(y = reorder(device_protection, pct), x = n, fill = churn)) + 
+  geom_col(position = "fill") 
+```
+
+## Contract Code (NOT significant)
+
+```{r}
+churn_training %>%
+  group_by(contract_code, churn) %>%
+  summarise(n = n())  %>%
+  pivot_wider(names_from = churn, values_from = n, values_fill = 0) %>%
+  mutate(n = `0` + `1`,
+         pct_churn = round(`1`/n, 3)) %>%
+  arrange(desc(pct_churn)) -> frequency_table_contract
+
+frequency_table_contract
+
+churn_training %>%
+  group_by(contract_code, churn) %>%
+  summarise(n = n()) %>%
+  ggplot(aes(y = contract_code, x = n, fill = churn)) + 
+  geom_col()
+
+churn_training %>%
+  group_by(contract_code, churn) %>%
+  summarise(n = n()) %>%
+  mutate(pct = n/sum(n)) %>%
+  ggplot(aes(y = reorder(contract_code, pct), x = n, fill = churn)) + 
+  geom_col(position = "fill") 
+```
+
+## Currency Code (SIGNIFICANT)
+
+```{r}
+churn_training %>%
+  group_by(currency_code, churn) %>%
+  summarise(n = n())  %>%
+  pivot_wider(names_from = churn, values_from = n, values_fill = 0) %>%
+  mutate(n = `0` + `1`,
+         pct_churn = round(`1`/n, 3)) %>%
+  arrange(desc(pct_churn)) -> frequency_table_currency
+
+frequency_table_currency
+
+churn_training %>%
+  group_by(currency_code, churn) %>%
+  summarise(n = n()) %>%
+  ggplot(aes(y = currency_code, x = n, fill = churn)) + 
+  geom_col()
+
+churn_training %>%
+  group_by(currency_code, churn) %>%
+  summarise(n = n()) %>%
+  mutate(pct = n/sum(n)) %>%
+  ggplot(aes(y = reorder(currency_code, pct), x = n, fill = churn)) + 
+  geom_col(position = "fill") 
+```
+
+## Mailing Code (SIGNIFICANT)
+
+```{r}
+churn_training %>%
+  group_by(maling_code, churn) %>%
+  summarise(n = n())  %>%
+  pivot_wider(names_from = churn, values_from = n, values_fill = 0) %>%
+  mutate(n = `0` + `1`,
+         pct_churn = round(`1`/n, 3)) %>%
+  arrange(desc(pct_churn)) -> frequency_table_mailing_code
+
+frequency_table_mailing_code
+
+churn_training %>%
+  group_by(maling_code, churn) %>%
+  summarise(n = n()) %>%
+  ggplot(aes(y = maling_code, x = n, fill = churn)) + 
+  geom_col()
+
+churn_training %>%
+  group_by(maling_code, churn) %>%
+  summarise(n = n()) %>%
+  mutate(pct = n/sum(n)) %>%
+  ggplot(aes(y = reorder(maling_code, pct), x = n, fill = churn)) + 
+  geom_col(position = "fill") 
+```
+
+## Paperless Billing (POSSIBLY significant)
+
+```{r}
+churn_training %>%
+  group_by(paperless_billing, churn) %>%
+  summarise(n = n())  %>%
+  pivot_wider(names_from = churn, values_from = n, values_fill = 0) %>%
+  mutate(n = `0` + `1`,
+         pct_churn = round(`1`/n, 3)) %>%
+  arrange(desc(pct_churn)) -> frequency_table_paperless
+
+frequency_table_paperless
+
+churn_training %>%
+  group_by(paperless_billing, churn) %>%
+  summarise(n = n()) %>%
+  ggplot(aes(y = paperless_billing, x = n, fill = churn)) + 
+  geom_col()
+
+churn_training %>%
+  group_by(paperless_billing, churn) %>%
+  summarise(n = n()) %>%
+  mutate(pct = n/sum(n)) %>%
+  ggplot(aes(y = reorder(paperless_billing, pct), x = n, fill = churn)) + 
+  geom_col(position = "fill") 
+```
+ 
+## Online Backup
+ 
+```{r}
+churn_training %>%
+  group_by(online_backup, churn) %>%
+  summarise(n = n())  %>%
+  pivot_wider(names_from = churn, values_from = n, values_fill = 0) %>%
+  mutate(n = `0` + `1`,
+         pct_churn = round(`1`/n, 3)) %>%
+  arrange(desc(pct_churn)) -> frequency_table_online_backup
+
+frequency_table_online_backup
+
+churn_training %>%
+  group_by(online_backup, churn) %>%
+  summarise(n = n()) %>%
+  ggplot(aes(y = online_backup, x = n, fill = churn)) + 
+  geom_col()
+
+churn_training %>%
+  group_by(online_backup, churn) %>%
+  summarise(n = n()) %>%
+  mutate(pct = n/sum(n)) %>%
+  ggplot(aes(y = reorder(online_backup, pct), x = n, fill = churn)) + 
+  geom_col(position = "fill") 
+```
+
+## Payment Method
+
+```{r}
+churn_training %>%
+  group_by(payment_method, churn) %>%
+  summarise(n = n())  %>%
+  pivot_wider(names_from = churn, values_from = n, values_fill = 0) %>%
+  mutate(n = `0` + `1`,
+         pct_churn = round(`1`/n, 3)) %>%
+  arrange(desc(pct_churn)) -> frequency_table_payment_method
+
+frequency_table_payment_method
+
+churn_training %>%
+  group_by(payment_method, churn) %>%
+  summarise(n = n()) %>%
+  ggplot(aes(y = payment_method, x = n, fill = churn)) + 
+  geom_col()
+
+churn_training %>%
+  group_by(payment_method, churn) %>%
+  summarise(n = n()) %>%
+  mutate(pct = n/sum(n)) %>%
+  ggplot(aes(y = reorder(payment_method, pct), x = n, fill = churn)) + 
+  geom_col(position = "fill") 
+```
+
+```{r}
+churn_training %>%
+  group_by(gender, churn) %>%
+  summarise(n = n())  %>%
+  pivot_wider(names_from = churn, values_from = n, values_fill = 0) %>%
+  mutate(n = `0` + `1`,
+         pct_churn = round(`1`/n, 3)) %>%
+  arrange(desc(pct_churn)) -> frequency_table_gender
+
+frequency_table_gender
+
+churn_training %>%
+  group_by(gender, churn) %>%
+  summarise(n = n()) %>%
+  ggplot(aes(y = gender, x = n, fill = churn)) + 
+  geom_col()
+
+churn_training %>%
+  group_by(gender, churn) %>%
+  summarise(n = n()) %>%
+  mutate(pct = n/sum(n)) %>%
+  ggplot(aes(y = reorder(gender, pct), x = n, fill = churn)) + 
+  geom_col(position = "fill") 
+```
+
+## Network Speed
+
+```{r}
+churn_training %>%
+  group_by(network_speed, churn) %>%
+  summarise(n = n())  %>%
+  pivot_wider(names_from = churn, values_from = n, values_fill = 0) %>%
+  mutate(n = `0` + `1`,
+         pct_churn = round(`1`/n, 3)) %>%
+  arrange(desc(pct_churn)) -> frequency_table_network_speed
+
+frequency_table_network_speed
+
+churn_training %>%
+  group_by(network_speed, churn) %>%
+  summarise(n = n()) %>%
+  ggplot(aes(y = network_speed, x = n, fill = churn)) + 
+  geom_col()
+
+churn_training %>%
+  group_by(network_speed, churn) %>%
+  summarise(n = n()) %>%
+  mutate(pct = n/sum(n)) %>%
+  ggplot(aes(y = reorder(network_speed, pct), x = n, fill = churn)) + 
+  geom_col(position = "fill") 
+```
+
+## Train/Test Split
+
+```{r}
+# -- set a random seed for repeatablity 
+set.seed(100)
+
+# -- performs our train / test split 
+split1 <- initial_split(churn_training, prop = 0.7)
+
+# -- extract the training data form our bananna split 
+train <- training(split1)
+# -- extract the test data 
+test <- testing(split1)
+
+sprintf("Train PCT : %1.2f%%", nrow(train)/ nrow(churn_training) * 100)
+sprintf("Test  PCT : %1.2f%%", nrow(test)/ nrow(churn_training) * 100)
+```
+
+## RF M1 
+
+```{r}
+rf_recipe <- recipe(churn ~ ., data = train) %>%
+  step_rm(ip_address_asn, phone_area_code, email_domain, billing_postal, billing_city, customer_id, billing_address,customer_reg_date, senior_citizen) %>%
+  step_impute_median(all_numeric(), -all_outcomes()) %>%
+  step_unknown(all_nominal(), -all_outcomes()) %>%
+  step_dummy(all_nominal(), -all_outcomes()) %>%
+  prep()
+
+rf_model <- rand_forest(
+  trees = 100,
+  min_n = 10) %>%
+  set_engine("ranger",
+             importance = "permutation",
+             max.depth  = 25) %>% 
+  set_mode("classification")
+  
+#Permutation
+
+rf_workflow <- workflow() %>% 
+  add_recipe(rf_recipe) %>%
+  add_model(rf_model)  
+
+rf_fit <- rf_workflow %>%
+  fit(data = train)
+```
+
+# Evaluate (RF M1)
+
+```{r}
+#Score (training)  
+predict(rf_fit, train, type = "prob") %>%
+  bind_cols(predict(rf_fit, train, type = "class")) %>%
+  bind_cols(., train) -> scored_train1 
+
+#Score (testing) 
+predict(rf_fit, test, type = "prob") %>%
+  bind_cols(predict(rf_fit, test, type = "class")) %>%
+  bind_cols(., test) -> scored_test1   
+
+#Metrics: Train/Test 
+scored_train1 %>% 
+  metrics(churn, `.pred_1`, estimate = .pred_class) %>%
+  mutate(part = "training") %>%
+  bind_rows(scored_test1 %>%
+              metrics(churn, `.pred_1`, estimate = .pred_class) %>%
+              mutate(part = "testing") ) %>%
+  filter(.metric %in% c('accuracy', 'roc_auc')) %>%
+  pivot_wider(names_from = .metric, values_from = .estimate)
+  
+#VIP: top 10
+rf_fit %>%
+  extract_fit_parsnip() %>%
+  vip(num_features = 10)
+  
+#Confusion Matrices
+scored_train1 %>%
+  conf_mat(churn, .pred_class) %>%
+  autoplot(type = "heatmap")
+  
+ scored_test1 %>%
+  conf_mat(churn, .pred_class) %>%
+  autoplot(type = "heatmap")
+   
+options(yardstick.event_first = FALSE)
+
+#ROC-AUC 
+scored_train1 %>%
+mutate(model = "train") %>%
+bind_rows(scored_test1 %>%
+            mutate(model = "test")) %>%
+group_by(model) %>%
+roc_curve(churn, `.pred_1`) %>%
+autoplot() 
+
+#Operating Range 
+scored_test1  %>%
+roc_curve(churn, `.pred_1`) %>%
+mutate(FPR = round((1 - specificity), 2),
+       TPR = round(sensitivity, 3),
+       score_threshold =  1 - round(.threshold, 3)) %>%
+group_by(FPR) %>%
+summarise(score_threshold = max(score_threshold),
+          TPR = max(TPR)) %>%
+  ungroup() %>%
+  mutate(precision = TPR/(TPR + FPR)) %>%
+  subset(select = c("FPR", "TPR", "precision", "score_threshold")) %>%
+  filter(FPR <= 0.2) 
+
+```
+
+#RF M2
+
+```{r}
+rf_recipe2 <- 
+  recipe(churn ~ ., data = train) %>%
+  step_rm(ip_address_asn, phone_area_code, email_domain, billing_postal, billing_city, billing_address, customer_reg_date, senior_citizen, partner, phone_service, multiple_lines, wifi_calling_text, gender, network_speed, online_backup, customer_id) %>% 
+  step_impute_median(all_numeric(), -all_outcomes()) %>%
+  step_unknown(all_nominal(), -all_outcomes()) %>%
+  step_dummy(all_nominal(), -all_outcomes())
+
+rf_model2 <- rand_forest(
+  trees = 100,
+  min_n = 10) %>%
+  set_engine("ranger",
+            importance = "permutation",
+            max.depth  = 40) %>% 
+  set_mode("classification")
+  
+#Permutation Importance
+
+rf_workflow2 <- workflow() %>% 
+  add_recipe(rf_recipe2) %>%
+  add_model(rf_model2)  
+
+rf_fit2 <- rf_workflow2 %>%
+  fit(data = train)
+```
+
+## Evaluate (RF M2)
+
+```{r}
+#Score (training)  
+predict(rf_fit2, train, type = "prob") %>%
+  bind_cols(predict(rf_fit2, train, type = "class")) %>%
+  bind_cols(., train) -> scored_train2 
+
+#Score (testing)
+predict(rf_fit2, test, type = "prob") %>%
+  bind_cols(predict(rf_fit2, test, type = "class")) %>%
+  bind_cols(., test) -> scored_test2   
+
+#Metrics: Train/Test 
+scored_train2 %>%
+  metrics(churn, `.pred_1`, estimate = .pred_class) %>%
+  mutate(part = "training") %>%
+  bind_rows(scored_test2 %>%
+              metrics(churn, `.pred_1`, estimate = .pred_class) %>%
+              mutate(part = "testing") ) %>%
+  filter(.metric %in% c('accuracy','roc_auc')) %>%
+  pivot_wider(names_from = .metric, values_from = .estimate)
+  
+#VIP: top 10
+rf_fit2 %>%
+  extract_fit_parsnip() %>%
+  vip(num_features = 10)
+  
+#Confusion Matrices 
+scored_train2 %>%
+  conf_mat(churn, .pred_class) %>%
+  autoplot(type = "heatmap")
+  
+scored_test2 %>%
+  conf_mat(churn, .pred_class) %>%
+  autoplot(type = "heatmap")
+   
+options(yardstick.event_first = FALSE)
+  
+#ROC-AUC 
+scored_train2 %>%
+  mutate(model = "train") %>%
+  bind_rows(scored_test2 %>%
+              mutate(model = "test")) %>%
+  group_by(model) %>%
+  roc_curve(churn, `.pred_1`) %>%
+  autoplot() 
+
+#Operating Range 
+scored_test2  %>%
+  roc_curve(churn, `.pred_1`) %>%
+  mutate(FPR = round((1 - specificity), 2),
+         TPR = round(sensitivity, 3),
+         score_threshold = 1 - round(.threshold, 3)) %>%
+  group_by(FPR) %>%
+  summarise(score_threshold = max(score_threshold),
+            TPR = max(TPR))%>%
+  ungroup() %>%
+  mutate(precision = TPR/(TPR + FPR)) %>%
+  subset(select = c("FPR", "TPR", "precision", "score_threshold")) %>%
+  filter(FPR <= 0.2)
+```
+
+## Holdout Preds & Kaggle
+
+```{r, warning=FALSE, message=FALSE}
+#Score Training
+predict(rf_fit2, churn_holdout, type = "prob") %>%
+  bind_cols(predict(rf_fit2, churn_holdout, type = "class")) %>%
+  bind_cols(., churn_holdout) -> churn_holdout_score
+
+kaggle <- churn_holdout_score %>%
+  mutate(churn = as.factor(if_else(.pred_1 >= 0.10, 1, 0)))
+
+kaggle %>%
+  ggplot(aes(.pred_1, fill=churn)) +
+  geom_histogram(bins = 100) +
+  xlim(0, 1) +
+  geom_vline(aes(xintercept = 0.095)) +
+  labs(title = "Prediction File Score Distribution")
+
+#Kaggle Submission (CSV)
+kaggle <- churn_holdout_score %>%
+  mutate(churn = .pred_1) %>%
+  subset(select = c("customer_id", "churn"))
+
+kaggle
+
+write_csv(kaggle, "Project_1_Preds_Tyler_Grosman.csv")
+```
