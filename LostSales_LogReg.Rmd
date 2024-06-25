@@ -1,0 +1,171 @@
+---
+title: "Lost Sales Case Analysis"
+output:
+  html_document:
+    df_print: paged
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r, message=FALSE, warning=FALSE}
+library(pROC)
+library(caret)
+library(tidyverse)
+library(lubridate)
+library(janitor)
+library(skimr)
+library(lubridate)
+library(RSocrata)
+library(tidyquant)
+library(tidymodels)
+library(ranger)
+library(topicmodels)
+library(readr)
+library(tidyverse)
+library(lubridate)
+library(dplyr)
+library(tidytext)
+library(rtweet)
+library(readxl)
+library(janitor)
+library(devtools)
+library(Rcpp)
+library(vip)
+library(ggplot2)
+library(corrplot)
+library(MASS)
+library(VIF)
+library(vip)
+library(fastDummies)
+
+```
+
+```{r, message=FALSE, warning=FALSE}
+lost_sales <- read_csv(file = "C:/Users/tyler/OneDrive/Documents/Projects_and_homework/MSBA Fall 2021/BAN 6025 Predictive Analytics & Data Mining/LostSales.csv") %>%
+  clean_names()
+  
+```
+
+```{r, message=FALSE, warning=FALSE}
+status <- as.factor(lost_sales$status)
+part_type <- as.factor(lost_sales$part_type)
+
+skim(lost_sales)
+
+```
+Analysis
+Begin by determining the current state of the company’s ability to win orders. 
+•	What percentage of the quotes don’t result in subsequent orders within 30 days?
+
+#   49.45% do not result in subsequent orders within 30 days.
+
+```{r}
+lost_sales %>%
+  count(status)
+
+272/550
+```
+
+
+The company sells to both original equipment manufacturers (OE) and to aftermarket suppliers (AM).  Sales managers expect that the “hit” rates for these two markets are vastly different.
+•	Using a simple contingency table or graph, does it appear that winning a sale is associated with part type (OE or AM)?  That is, does there appear to be a difference in the percentage of sales won for OE vs AM suppliers?  (You don’t need to do a formal statistical test)
+
+#   Winning a sale is more likely for AM suppliers. It appears that OE part suppliers have a higher likelihood of losing a sale than do AM suppliers and both pieces of information are evidenced by the graph below. 
+
+```{r, message=FALSE, warning=FALSE}
+ggplot(lost_sales, aes(status)) + geom_bar(aes(fill=part_type))
+
+lost_sales %>%
+  filter(status == "Lost") %>%
+  count(part_type)
+
+```
+
+Many of the sales managers insist that a more important factor in lost sales opportunities is related to pricing.  They believe that the company’s prices are too high, and that customers are moving to lower cost providers.
+To explore the relationship between Status and Quote, we can use a logistic regression model.
+•	Build a simple logistic regression model for Status vs Quote.  Based on this model, does it appear that the likelihood that an order will be lost increases or decreases as the quoted price increases?  Is quoted price a significant predictor of whether or not an order will be lost? 
+
+#   It appears that the likelihood that an order will be lost increases as the quoted price increases. Furthermore, it does not appear that quoted price is a significant predictor of losing an order/sale.
+
+```{r}
+logit_Q1 <- glm(formula = relevel(status, "Lost") ~ lost_sales$quote, family = binomial(link = "logit"))
+summary(logit_Q1)
+coefficients(logit_Q1)
+anova(logit_Q1)
+```
+
+The remaining factor is Time to Delivery (the quoted number of days before the order will be delivered).  
+•	Use logistic regression to explore the relationship between winning an order and delivery time (with the ultimate goal of predicting the probability of losing an order).  Is time to delivery a significant predictor of whether or not the order is lost?  How does time to delivery affect the likelihood of losing an order?
+
+#   Time to delivery seems to be a significant predictor with a p-value of 0.000000139. If time to delivery is lower, it is more likely that the sale will be won and if the time to delivery is higher then the opposite is true.
+
+Finally, build a multiple logistic regression model that includes Quote, Part Type, and Time to Delivery as the explanatory variables.  If any of the explanatory variables are not significant, remove them one at a time until you end up with a model where all of the explanatory variables are significant.
+
+```{r, message=FALSE, warning=FALSE}
+levels(status)
+
+logit_Q2 <- glm(formula = relevel(status, "Won") ~ lost_sales$time_to_delivery + part_type, family = binomial(link = "logit"))
+summary(logit_Q2)
+coefficients(logit_Q2)
+anova(logit_Q2)
+
+logit_Q3 <- glm(formula = relevel(status, "Won") ~ lost_sales$quote + lost_sales$time_to_delivery + part_type, family = binomial(link = "logit"))
+summary(logit_Q3)
+coefficients(logit_Q3)
+anova(logit_Q3)
+
+step_logit_Q3 <- stepAIC(logit_Q3, direction = "both")
+summary(step_logit_Q3)
+coefficients(step_logit_Q3)
+anova(step_logit_Q3)
+plot(step_logit_Q3)
+```
+
+```{r, message=FALSE, warning=FALSE}
+pvalue <- predict(step_logit_Q3, lost_sales, type = "response")
+
+pstatus <- ifelse(pvalue >0.5, "Lost", "Won")
+
+pstatus <- as.factor(pstatus)
+
+lost_sales_status <- pstatus
+lost_sales_probability <- pvalue
+
+p_status <- as.factor(lost_sales_status)
+```
+
+•	Does this model appear to be useful for predicting the likelihood of a lost sale?  What is the misclassification rate?  What is the area under the ROC curve?
+
+#   This model appears to be somewhat useful for predicting the likelihood of a lost sale (balanced accuracy rate = 0.5971). The misclassification rate is 0.4029 (1-0.5971). The area under the ROC curve is 0.6376. 
+
+•	Generate a confusion matrix.  Does the model appear to be more effective at correctly predicting lost sales or won sales (or is it equally effective at predicting both)?
+
+#  The model appears to be better at predicting sales won rather than sales lost and it should be noted that this can still give us insight into losing sales as long as we are working with probablities. We can subtract the probability of winning a sale from 1 in order to generate the probablity of losing said sale. 
+
+```{r, message=FALSE, warning=FALSE}
+confusionMatrix(p_status, status)
+
+roc(status, pvalue, plot = TRUE, auc = TRUE)
+
+```
+
+•	Suppose that we have an order in the pipeline that is for an after market (AM) supplier with a quoted price of $1400 and an expected time to deliver of 20 days.  What is the probability that this sales will be lost?  Assuming that the sales person has some control over the quoted price and time to delivery, what actions could he take to decrease the probability of losing the sale (or, equivalently, to increase the probability of winning the sales)?
+
+#    Some actions that could be taken to prevent the sale from being lost or to similarly increase the likelihood that the sale is won would be expediting the manufacturing, shipping, etc. of the part or alternatively giving a discount to the purchasing party. These are both good ways to increase the probability of the sale being won rather than lost. 
+
+```{r}
+lost_sales %>%
+  summarize(mean(quote))
+-7.768e-01+1.931e-05*(1400)+1.837e-02*(20)+4.711e-01*(0)
+
+```
+
+For further thought (please answer):
+•	In this analysis, you built three different models for predicting lost sales.  How do the misclassification rates compare for the three models?  Is this what you would expect based on the significance of the explanatory variables?
+•	Based on the misclassification rates, which model does the best job of predicting Status?
+•	How could this model be improved?  For example, are there any variables missing from this data set that might improve the model’s predictive ability?
+
+#   Misclassfication rates decrease across the models as insignificant variables are removed. If the model can more accurately predict loss/won status then it means we are analyzing statistically significant predictors (even if they may not be the most relevant predictors for our particular analysis) so this should be expected. The best model that we created was the reduced or partial model. with a misclassification rate of about 40.3%. The model could potentially be improved by including other variables such as the vehicle type (in order to understand if sales are being lost in a particular sector of the automotive industry). Part type gives us some information about this, however it only refers to the production type of the part itself and does not reference vehicle type in any way. Additionally, 
+

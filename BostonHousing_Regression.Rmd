@@ -1,0 +1,493 @@
+---
+title: "6 Boston Housing"
+author  : "Your Name Here"
+date    : "Submission Date" 
+output: 
+  html_document:
+    toc: true
+    toc_depth: 3
+    theme: paper
+    highlight: tango
+---
+
+## Background 
+
+You have been hired by the tax authority of the City of Boston to asses Tax Assessments. Your task is to create a model to predict the av_total (assessed value) of properties in the greater Boston area. 
+
+## Libraries
+
+load your libraries 
+
+you are going to need to install the following packages 
+
+- tidymodels
+- ranger # -- for random forest 
+- vip  n # -- for variable importance 
+
+```{r setup, include=FALSE, warning=FALSE, message=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(tidymodels)
+library(ranger)
+library(topicmodels)
+library(readr)
+library(tidyverse)
+library(lubridate)
+library(dplyr)
+library(tidytext)
+library(rtweet)
+library(readxl)
+library(janitor)
+library(devtools)
+library(Rcpp)
+library(vip)
+library(reshape2)
+library(corrplot)
+library(MASS)
+library(skimr)
+library(VIF)
+library(fastDummies)
+```
+
+## Import 
+
+boston.csv 
+zips.csv 
+
+```{r}
+boston <- read_csv("boston.csv")
+zips <- read_csv("zips.csv") %>%
+  mutate(ZIP = as.character(ZIP)) %>%
+  mutate(ZIP = str_sub(ZIP, 2,5)) %>%
+  mutate(ZIP = as.numeric(ZIP))
+```
+
+## Explore Target 
+what's the average av_total? 
+
+1. make a histogram of av_total
+2. make a box plot of av_total
+
+```{r}
+boston %>%
+  summarize(mean(AV_TOTAL))
+boston %>%
+  ggplot(aes(AV_TOTAL)) +
+  geom_histogram() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "", x = "", y = "")
+boston %>%
+  ggplot(aes(AV_TOTAL)) +
+  geom_boxplot() +
+  coord_flip() +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "", x = "", y = "")
+```
+
+## Transform 
+
+1. join boston to zips on zipcode = zip, 
+  - note zip is character you'll need to convert it to an integer. 
+2. create a home age variable using the following logic 
+  - IF yr_remod > yr_built THEN age = 2020 - yr_remod
+  - ELSE age = 2020 - yr_built
+
+```{r}
+transformed_data <- zips %>%
+  inner_join(boston, zips, by = c("ZIP"="ZIPCODE")) %>%
+  mutate(HOME_AGE = if_else(YR_REMOD > YR_BUILT, 2020 - YR_REMOD, 2020 - YR_BUILT, missing = NULL))
+```
+
+## Explore Numeric Predictors 
+
+1. create histograms of av_total, land_sf, living_area, age 
+2. do the variables look normally distributed 
+  - if not would taking the log of the variable improve the normality? 
+  - make a histogram of the log of the variables 
+3. create bar chart of mean av_total by city_state
+ 
+
+```{r}
+options(scipen = 10)
+
+histogram <- function(df, x, ...) {
+  ggplot(df) +
+    geom_histogram(mapping = aes(x = df[[x]], ...)) +
+    labs(title = paste(x, "distribution"), x = x)
+}
+
+AV_TOTAL_hist <- histogram(transformed_data, "AV_TOTAL")
+AV_TOTAL_hist
+
+LAND_SF_hist <- histogram(transformed_data, "LAND_SF")
+LAND_SF_hist
+
+LIVING_AREA_hist <- histogram(transformed_data, "LIVING_AREA")
+LIVING_AREA_hist
+
+HOME_AGE_hist <- histogram(transformed_data, "HOME_AGE")
+HOME_AGE_hist
+
+logarithmic_histogram <- function(df, x, ...) {
+  ggplot(df) +
+    geom_histogram(mapping = aes(x = log(df[[x]]), ...)) +
+    labs(title = paste(x, "distribution"), x = x)
+}
+
+AV_TOTAL_log <- logarithmic_histogram(transformed_data, "AV_TOTAL")
+AV_TOTAL_log
+
+LAND_SF_log <- logarithmic_histogram(transformed_data, "LAND_SF")
+LAND_SF_log
+
+LIVING_AREA_log <- logarithmic_histogram(transformed_data, "LIVING_AREA")
+LIVING_AREA_log
+
+HOME_AGE_log <- logarithmic_histogram(transformed_data, "HOME_AGE")
+HOME_AGE_log
+
+transformed_data %>%
+  group_by(City_State, na.rm = TRUE) %>%
+  ggplot(aes(x = reorder(City_State, -AV_TOTAL), y = AV_TOTAL)) +
+  geom_bar(mapping = NULL, stat = "identity", position = "stack") +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "City & State Name", y = "AV_TOTAL")
+```
+
+## Correlations 
+ 
+1. create a correlation matrix of av_total, land_sf, living_area, and age. 
+2. you'll need to remove the missing values 
+
+```{r}
+transformed_data %>%
+  filter(!is.na(AV_TOTAL)) %>%
+  filter(!is.na(LAND_SF)) %>%
+  filter(!is.na(LIVING_AREA)) %>%
+  filter(!is.na(HOME_AGE)) %>%
+  filter(!is.na(City_State))
+
+transformed_subset <- subset(transformed_data, select = c("AV_TOTAL", "LAND_SF", "LIVING_AREA", "HOME_AGE"))
+
+transformed_subset %>%
+  filter(!is.na(LAND_SF)) %>%
+  na.omit() %>%
+  cor() 
+transformed_subset %>%
+  na.omit() %>%
+  cor() %>%
+  melt %>%
+  ggplot(aes(x = Var1, y = Var2, fill = value)) +
+  geom_tile() +
+  scale_fill_gradient2(mid = "#FBFEF9", low = "#0C6291", high = "#A63446") +
+  geom_text(aes(label = round(value, 3)), color = "black")
+```
+
+
+## Explore Categorical Predictors 
+
+find 4 categorical variables are likely to be useful in predicting home prices? 
+
+1. use a bar chart with the mean av_total, 
+  - a useful variable will have differences in the mean of av_total 
+
+```{r}
+options(scipen = 10)
+
+transformed_data %>%
+  group_by(City_State) %>%
+  summarize(mean_AV_TOTAL = mean(AV_TOTAL)) %>%
+  ggplot(aes(x = reorder(City_State, -mean_AV_TOTAL), y = mean_AV_TOTAL)) +
+  geom_bar(mapping = NULL, stat = "identity", position = "stack") +
+  geom_hline(aes(yintercept = mean(mean_AV_TOTAL))) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "AV_TOTAL by City and State", x = "Name of City and State", y = "AV_TOTAL")
+transformed_data %>%
+  group_by(R_BLDG_STYL) %>%
+  summarize(mean_AV_TOTAL = mean(AV_TOTAL)) %>%
+  ggplot(aes(x = reorder(R_BLDG_STYL, -mean_AV_TOTAL), y = mean_AV_TOTAL)) +
+  geom_bar(mapping = NULL, stat = "identity", position = "stack") +
+  geom_hline(aes(yintercept = mean(mean_AV_TOTAL))) +
+  theme(axis.text.x = element_text(hjust = 1)) +
+  labs(title = "AV_TOTAL by Building Style", x = "", y = "AV_TOTAL")
+transformed_data %>%
+  group_by(R_INT_CND) %>%
+  summarize(mean_AV_TOTAL = mean(AV_TOTAL)) %>%
+  ggplot(aes(x = reorder(R_INT_CND, -mean_AV_TOTAL), y = mean_AV_TOTAL)) +
+  geom_bar(mapping = NULL, stat = "identity", position = "stack") +
+  geom_hline(aes(yintercept = mean(mean_AV_TOTAL))) +
+  theme(axis.text.x = element_text(hjust = 1)) +
+  labs(title = "AV_TOTAL by Interior Condition", x = "Interior Condition", y = "AV_TOTAL")
+transformed_data %>%
+  group_by(R_OVRALL_CND) %>%
+  summarize(mean_AV_TOTAL = mean(AV_TOTAL)) %>%
+  ggplot(aes(x = reorder(R_OVRALL_CND, -mean_AV_TOTAL), y = mean_AV_TOTAL)) +
+  geom_bar(mapping = NULL, stat = "identity", position = "stack") +
+  geom_hline(aes(yintercept = mean(mean_AV_TOTAL))) +
+  theme(axis.text.x = element_text(hjust = 1)) +
+  labs(title = "AV_TOTAL by Overall condition of Home", x = "Overall Condition", y = "AV_TOTAL")
+```
+
+### Prepare your data 
+
+1. select the following columns 
+- pid
+- av_total
+- age 
+- land_sf
+- living_area
+- num_floors
+- population
+- median_income
+- city_state
+
+PLUS your 4 character columns you think will be useful 
+
+2. Convert character columns to factors 
+  - hint: mutate_at(c("var1", ...), as.factor)
+
+
+```{r}
+prep_data <- transformed_data %>%
+  subset(select = c("PID", "AV_TOTAL", "HOME_AGE", "LAND_SF", "LIVING_AREA", "NUM_FLOORS", "Population", "Median_Income", "City_State", "R_INT_CND", "R_BLDG_STYL", "R_OVRALL_CND", "R_KITCH_STYLE")) %>%
+  mutate_at(c("City_State", "R_INT_CND", "R_BLDG_STYL", "R_OVRALL_CND", "R_KITCH_STYLE"), as.factor)
+```
+
+## 1. Partition your data 70/30 (train / test split) 
+
+1. split your data set into 70% training and 30% test 
+2. print out the % of each data set
+
+```{r}
+set.seed(1000)
+train_test_split <- initial_split(prep_data, prop = 0.7)
+
+train <- training(train_test_split)
+test <- testing(train_test_split)
+
+nrow(train)/nrow(prep_data)
+nrow(test)/nrow(prep_data)
+```
+
+## 2. Recipe
+
+Define a recipe, using the following 
+1. remove pid (step_rm)
+2. impute missing numeric values with the mean (step_meanimpute) 
+3. take the log of all numeric variables (step_log) 
+  - notice this will log transform av_total 
+  - step_log(all_numeric()) # -- log of price 
+4. impute missing categorical variables with unknown or mode impute (step_unknown, step_modeimpute)
+5. dummy encode categorical variables (step_dummy)
+6. prep it so we can use it. 
+
+```{r}
+recipe_spec <- recipe(AV_TOTAL ~ ., data = prep_data) %>%
+  step_rm(PID) %>%
+  step_impute_mean(all_numeric()) %>%
+  step_log(all_numeric()) %>%
+  step_impute_mode(all_nominal()) %>%
+  step_dummy(all_nominal())
+recipe_spec
+```
+
+## 3. Bake 
+
+Now that we have prepped our recipe we can apply it to training and testing data; the function for this is bake(). We won’t touch the test set until we are ready to start evaluating our models.
+
+```{r}
+bake_train <- bake(recipe_spec %>% prep(), train)
+bake_test  <- bake(recipe_spec %>% prep(), test)
+```
+
+## 4. Create and Fit a linear Regression & a Random Forest
+
+Now we are ready to fit our model. Notice that you are creating a model object (linear_reg) by calling the linear_reg method, specifying the mode regression since we are creating a regression task, you set the engine to which engine you want to use typically lm or glmnet then you specify the formula in the fit method and point to your baked data. 
+
+**AS AN ALTERNATIVE ** 
+you can "juice()" the recipe like this. It does the same thing as bake.
+
+logistic_reg <-  
+  logistic_reg(mode = "regression") %>%   
+  set_engine("lm") %>%  
+  fit(av_total ~., data = bake_train)  
+  
+random_forest <-  
+  rand_forest(trees=25) %>%
+  set_mode("regression") %>%
+  set_engine("ranger",  importance = "permutation") %>%
+  fit(av_total ~., data = bake_train)
+
+
+```{r}
+linear_model <-  
+  linear_reg(mode = "regression") %>%   
+  set_engine("lm") %>%  
+  fit(AV_TOTAL ~., data = bake_train)  
+  
+random_forest_model <-  
+  rand_forest(trees = 25) %>%
+  set_mode("regression") %>%
+  set_engine("ranger",  importance = "permutation") %>%
+  fit(AV_TOTAL ~., data = bake_train)
+```
+
+## 4b. Evaluate Fit of Linear Regression 
+
+1. use glance on the model$fit 
+  - what is the RSQUARE?
+  
+2. use tidy on the model$fit 
+  - what predictors have an p-value above 0.05? 
+
+```{r}
+glance(linear_model$fit)
+tidy(linear_model$fit)
+```
+
+## 5. Prep for Evaluation 
+
+We want to attach the Predicted to the data set, but remember we took the LOG of AV_TOTAL so we need to convert it back to actual $dollars using EXP, this way we can deep dive into where out model is performing well and where it is not. We do this to both the Training and the Test set. 
+
+notice the .pred comes from the model prediction, we convert that back from the LOG to real dollars using **EXP** function 
+
+1. create scored_train_lm, using predict 
+  - predict(lm_model, baked_train) %>% # this produces a .pred 
+  - mutate(.pred = exp(.pred)) %>%  # this converts .pred back to $ instead of log 
+  - bind_cols(train)   %>%
+  - mutate(.res = av_total - .pred, # this is your residual i.e. your error
+           .model = "linear reg",
+           .part  = "train")  
+
+2. create scored_test_lm, using predict 
+  - predict(lm_model, baked_test) %>% # this produces a .pred 
+  - mutate(.pred = exp(.pred)) %>%  # this converts .pred back to $ instead of log 
+  - bind_cols(test)   %>%
+  - mutate(.res = av_total - .pred, # this is your residual i.e. your error
+           .model = "linear reg",
+           .part  = "test")  
+           
+3. create scored_train_rf, using predict 
+  - predict(rf_model, baked_train) %>% # this produces a .pred 
+  - mutate(.pred = exp(.pred)) %>%  # this converts .pred back to $ instead of log 
+  - bind_cols(train)   %>%
+  - mutate(.res = av_total - .pred, # this is your residual i.e. your error
+           .model = "random forest",
+           .part  = "train")  
+           
+4. create scored_test_rf, using predict 
+  - predict(rf_model, baked_test) %>% # this produces a .pred 
+  - mutate(.pred = exp(.pred)) %>%  # this converts .pred back to $ instead of log 
+  - bind_cols(test)   %>%
+  - mutate(.res = av_total - .pred, # this is your residual i.e. your error
+           .model = "random forest",
+           .part  = "test") 
+           
+5. bind all 4 data sets together into "model_evaluation" data set. 
+
+```{r}
+scored_train_lm <- predict(linear_model, bake_train) %>% 
+  mutate(.pred = exp(.pred)) %>% 
+  bind_cols(train) %>%
+  mutate(.res = AV_TOTAL - .pred, .model = "linear reg", .part  = "train")
+
+scored_test_lm <- predict(linear_model, bake_test) %>%
+  mutate(.pred = exp(.pred)) %>% 
+  bind_cols(test) %>%
+  mutate(.res = AV_TOTAL - .pred, .model = "linear reg", .part  = "test")
+
+scored_train_rf <- predict(random_forest_model, bake_train) %>% 
+  mutate(.pred = exp(.pred)) %>% 
+  bind_cols(train) %>%
+  mutate(.res = AV_TOTAL - .pred, .model = "random forest", .part  = "train")  
+           
+scored_test_rf <- predict(random_forest_model, bake_test) %>% 
+  mutate(.pred = exp(.pred)) %>% 
+  bind_cols(test) %>%
+  mutate(.res = AV_TOTAL - .pred, .model = "random forest", .part  = "test")
+
+model_evaluation <- bind_rows(scored_train_lm, scored_test_lm, scored_train_rf, scored_test_rf, id = NULL)
+```
+
+## 6. Evaluate
+
+We want to check our model's performance and take a look at which features were most important. 
+
+1. use metrics and scored_train and scored_test, what is the RSQUARE and RMSE of training and test? take model_evaluation and pipe it through metrics but group by .model and ,part
+
+model_evaluation %>%
+  group_by(.model, .part) %>%
+    metrics(av_total, estimate = .pred) %>%
+  pivot_wider(names_from = .metric, values_from = .estimate) %>%
+  select(-.estimator)
+  
+use the VIP package to get the variable importance of top 20 features,
+2. linear regression
+3. random forest 
+
+model %>%
+  vip(num_features = 20)
+
+is there a difference in variable importance between rf and linear regression? 
+  
+3. which model performed better? and what tells you that it did?
+
+```{r}
+model_evaluation %>%
+  group_by(.model, .part) %>%
+  metrics(AV_TOTAL, estimate = .pred) %>%
+  pivot_wider(names_from = .metric, values_from = .estimate) %>%
+  subset(select = c(".model", ".part", "rmse", "rsq", "mae"))
+
+linear_model %>%
+  vip(num_features = 20)
+
+random_forest_model %>%
+  vip(num_features = 20)
+```
+  
+## 7. Which Houses did we perform well AND not so well on?
+
+using only the TEST partition what are the top 5 houses 
+1. that the linear regression did the best predicting 
+2. that the random forest got did the best predicting 
+
+using only the TEST partition what are the top 5 houses we that our models didn't predict well. 
+1. that the linear regression did the worst predicting 
+2. that the random forest got did the worst predicting 
+
+
+```{r}
+linear_reg_test <- scored_test_lm  %>%
+  filter(!is.na(HOME_AGE)) %>%
+  mutate(.res = AV_TOTAL - .pred) %>%
+  slice_max(abs(.res), n = 10) %>%
+  arrange(desc(AV_TOTAL))
+linear_reg_test
+
+linear_reg_test <- scored_test_lm %>%
+  filter(!is.na(HOME_AGE)) %>%
+  mutate(.res = AV_TOTAL - .pred) %>%
+  slice_min(abs(.res), n = 10) %>%
+  arrange(desc(AV_TOTAL))
+linear_reg_test
+
+random_forest_test <- scored_test_rf %>%
+  filter(!is.na(HOME_AGE)) %>%
+  mutate(.res = AV_TOTAL - .pred) %>%
+  slice_max(abs(.res), n = 10) %>%
+  arrange(desc(AV_TOTAL))
+random_forest_test
+
+random_forest_test <- scored_test_rf %>%
+  filter(!is.na(HOME_AGE)) %>%
+  mutate(.res = AV_TOTAL - .pred) %>%
+  slice_min(abs(.res), n = 10) %>%
+  arrange(desc(AV_TOTAL))
+random_forest_test
+```
+
+
+

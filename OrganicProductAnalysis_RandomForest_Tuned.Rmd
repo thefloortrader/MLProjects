@@ -1,0 +1,143 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+```{r, message=FALSE, warning=FALSE}
+library(pROC)
+library(caret)
+library(tidyverse)
+library(lubridate)
+library(janitor)
+library(skimr)
+library(lubridate)
+library(RSocrata)
+library(tidyquant)
+library(tidymodels)
+library(ranger)
+library(topicmodels)
+library(readr)
+library(tidyverse)
+library(lubridate)
+library(dplyr)
+library(tidytext)
+library(rtweet)
+library(readxl)
+library(janitor)
+library(devtools)
+library(Rcpp)
+library(vip)
+library(ggplot2)
+library(corrplot)
+library(MASS)
+library(VIF)
+library(vip)
+library(fastDummies)
+library(kableExtra)
+library(GGally)
+library(kableExtra)
+library(fastshap)
+library(rpart.plot)
+```
+
+
+```{r}
+organics <- read_csv("organics.csv") %>%
+  clean_names() %>%
+  mutate(target_buy = as.factor(target_buy)) %>%
+  mutate_if(is.character, factor) %>%
+  mutate(target_amt = as.factor(target_amt))
+
+new_organics <- read_csv("New_organics.csv") %>%
+  clean_names()
+```
+```{r}
+set.seed(50)
+
+organics_split <- initial_split(organics, prop = 0.7)
+
+organics_train <- training(organics_split)
+
+organics_test <- testing(organics_split)
+
+sprintf("Training Percentage: %1.2f%%", nrow(organics_train)/nrow(organics) * 100)
+sprintf("Testing Percentage: %1.2f%%", nrow(organics_test)/nrow(organics) * 100)
+
+head(organics_train)
+ 
+```
+
+```{r}
+organics_recipe <- recipe(target_buy ~ ., data = organics_train) %>%
+  step_rm(id, dem_cluster, target_amt) %>%
+  step_naomit(all_nominal(), all_numeric(), -all_outcomes()) %>%
+  step_unknown(all_nominal(), -all_outcomes()) %>%
+  step_impute_median(all_numeric(), -all_outcomes()) %>%
+  step_dummy(all_nominal(), -all_outcomes()) %>%
+  prep()
+organics_recipe
+```
+
+## Bake 
+
+
+```{r}
+# -- apply the recipe 
+bake_train <- bake(organics_recipe, new_data = organics_train)
+bake_test  <- bake(organics_recipe, new_data = organics_test)
+```
+
+```{r}
+rand1 <- rand_forest(
+  mtry = 3,
+  trees = 100,
+  min_n = 10) %>%
+  set_engine("ranger",
+            importance = "permutation",
+            max.depth = 40) %>% 
+  set_mode("classification")
+
+rand1_workflow <- workflow() %>% 
+  add_recipe(organics_recipe) %>%
+  add_model(rand1) 
+
+rand1_fit <- rand1_workflow %>%
+  fit(data = bake_train)
+```
+
+```{r}
+rf_recipe2 <- 
+  recipe(target_buy ~ ., data = bake_train) %>%
+  step_rm() %>% 
+  step_impute_median(all_numeric(), -all_outcomes()) %>%
+  step_unknown(all_nominal(), -all_outcomes()) %>%
+  step_dummy(all_nominal(), -all_outcomes())
+
+rf_model2 <- rand_forest(
+  trees = 100,
+  min_n = 10) %>%
+  set_engine("ranger",
+            importance = "permutation",
+            max.depth = 40) %>% 
+  set_mode("classification")
+  
+#Permutation Importance
+
+rf_workflow2 <- workflow() %>% 
+  add_recipe(rf_recipe2) %>%
+  add_model(rf_model2)  
+
+rf_fit2 <- rf_workflow2 %>%
+  fit(data = train)
+```
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.

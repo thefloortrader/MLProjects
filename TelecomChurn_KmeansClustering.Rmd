@@ -1,0 +1,265 @@
+---
+title: "Project 3"
+author: Tyler Grosman
+course: BAN 6025
+output: html_document
+---
+
+# load libraries / install packages
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+```{r}
+library(readr)
+library(skimr)
+library(readxl)
+library(imputeTS)
+library(tidyverse)
+library(tidymodels)
+library(janitor)
+library(skimr)
+library(kableExtra)
+library(GGally)
+library(kableExtra) 
+library(vip)        
+library(fastshap)   
+library(MASS)
+library(ISLR)
+library(tree)
+library(dplyr)
+library(ggplot2)
+library(factoextra)
+library(mice)
+
+```
+
+# Read Bank Data
+
+```{r}
+telecom_churn <- read_xlsx("Churn2.xlsx") %>%
+  clean_names()
+
+telecom_churn %>%
+  group_by(state, churn) %>%
+  summarise(n = n())  %>%
+  pivot_wider(names_from = churn, values_from = n, values_fill = 0) %>%
+  mutate(n = `0` + `1`,
+         state_pct_churn = round(`1`/n, 3)) %>%
+  arrange(desc(state_pct_churn)) -> state_churn_rate
+```
+```{r}
+state_freq <- telecom_churn %>%
+  group_by(state) %>%
+  summarise(state_freq = n())
+```
+
+
+```{r}
+head(telecom_churn) 
+
+telecom_churn1 = subset(telecom_churn, select= -c(area_code, phone, state, churn))
+
+head(telecom_churn1)
+
+skim(telecom_churn1)
+
+telecom_churn2 = subset(telecom_churn, select= -c(area_code, phone, state, churn))
+  
+```
+
+## impute missing values
+
+```{r}
+#### TELECOM_PREP2
+telecom_prep2 <- na_mean(telecom_churn2)
+head(telecom_prep2)
+
+telecom_prep2$intl_plan_no <- ifelse(telecom_prep2$intl_plan == 'no', 1, 0)
+telecom_prep2$intl_plan_yes <- ifelse(telecom_prep2$intl_plan == 'yes', 1, 0)
+
+telecom_prep2$mail_plan_no <- ifelse(telecom_prep2$v_mail_plan == 'no', 1, 0)
+telecom_prep2$mail_plan_yes <- ifelse(telecom_prep2$v_mail_plan == 'yes', 1, 0)
+
+#standardize numeric variables
+
+telecom_prep2$account_length_s <- scale(telecom_prep2$account_length)
+telecom_prep2$v_mail_message_s <- scale(telecom_prep2$v_mail_message)
+
+telecom_prep2$day_mins_s <- scale(telecom_prep2$day_mins)
+telecom_prep2$day_calls_s <- scale(telecom_prep2$day_calls)
+telecom_prep2$day_charge_s <- scale(telecom_prep2$day_charge)
+
+telecom_prep2$eve_mins_s <- scale(telecom_prep2$eve_mins)
+telecom_prep2$eve_calls_s <- scale(telecom_prep2$eve_calls)
+telecom_prep2$eve_charge_s <- scale(telecom_prep2$eve_charge)
+
+telecom_prep2$night_mins_s <- scale(telecom_prep2$night_mins)
+telecom_prep2$night_calls_s <- scale(telecom_prep2$night_calls)
+telecom_prep2$night_charge_s <- scale(telecom_prep2$night_charge)
+
+telecom_prep2$intl_mins_s <- scale(telecom_prep2$intl_mins)
+telecom_prep2$intl_calls_s <- scale(telecom_prep2$intl_calls)
+telecom_prep2$intl_charge_s <- scale(telecom_prep2$intl_charge)
+
+telecom_prep2$cust_serv_calls_s <- scale(telecom_prep2$cust_serv_calls)
+
+# remove redundant and rejected variables
+telecom_final2 <- telecom_prep2 %>%
+  subset(select = -c(intl_plan, v_mail_plan, account_length, v_mail_message, day_mins, day_calls, day_charge, eve_mins, eve_calls, eve_charge, night_mins, night_calls, night_charge, intl_mins, intl_calls, intl_charge, cust_serv_calls))
+head(telecom_final2)
+
+```
+
+## create clusters
+
+```{r}
+#set a seed value so that the results are repeatable
+
+set.seed(50)
+
+#generate 5 clusters using default settings
+
+clusters <- kmeans(telecom_final2, 6, iter.max = 10, nstart = 1)
+
+str(clusters)
+clusters$size
+
+```
+
+# visually choose number of clusters
+
+```{r}
+# how many clusters
+
+fviz_nbclust(telecom_final2, kmeans, method = "wss")
+
+# build clusters
+
+clusters6 <- kmeans(telecom_final2, 6, iter.max = 100, nstart = 20)
+print(clusters6)
+
+# visualize clusters
+
+fviz_cluster(clusters6, telecom_final2, ellipse.type = "norm", geom = "point")
+
+```
+
+# explore clusters
+
+```{r}
+cluster <- as.factor(clusters6$cluster)
+
+clusters6
+
+#determine which variables are driving the cluster creation
+
+tree.clusters = tree(cluster ~ ., telecom_final2)
+
+summary(tree.clusters)
+plot(tree.clusters)
+text(tree.clusters, pretty = 0)
+tree.clusters
+
+ggplot(telecom_final2, aes(cluster)) + geom_bar()
+```
+
+
+```{r}
+ggplot(telecom_final2, aes(x = account_length_s)) + geom_histogram(bins = 20) 
+ggplot(telecom_final2, aes(x = account_length_s)) + geom_histogram(bins = 20) + facet_wrap(~clusters6$cluster)
+
+ggplot(telecom_final2, aes(x = v_mail_message_s)) + geom_histogram(bins = 20)
+ggplot(telecom_final2, aes(x = v_mail_message_s)) + geom_histogram(bins = 20) + facet_wrap(~clusters6$cluster)
+
+ggplot(telecom_final2, aes(x = day_mins_s)) + geom_histogram(bins = 20)
+ggplot(telecom_final2, aes(x = day_mins_s)) + geom_histogram(bins = 20) + facet_wrap(~clusters6$cluster)
+
+ggplot(telecom_final2, aes(x = day_calls_s)) + geom_histogram(bins = 20)
+ggplot(telecom_final2, aes(x = day_calls_s)) + geom_histogram(bins = 20) + facet_wrap(~clusters6$cluster)
+
+ggplot(telecom_final2, aes(x = day_charge_s)) + geom_histogram(bins = 20)
+ggplot(telecom_final2, aes(x = day_charge_s)) + geom_histogram(bins = 20) + facet_wrap(~clusters6$cluster)
+
+ggplot(telecom_final2, aes(x = eve_mins_s)) + geom_histogram(bins = 20)
+ggplot(telecom_final2, aes(x = eve_mins_s)) + geom_histogram(bins = 20) + facet_wrap(~clusters6$cluster)
+
+ggplot(telecom_final2, aes(x = eve_calls_s)) + geom_histogram(bins = 20)
+ggplot(telecom_final2, aes(x = eve_calls_s)) + geom_histogram(bins = 20) + facet_wrap(~clusters6$cluster)
+
+ggplot(telecom_final2, aes(x = eve_charge_s)) + geom_histogram(bins = 20)
+ggplot(telecom_final2, aes(x = eve_charge_s)) + geom_histogram(bins = 20) + facet_wrap(~clusters6$cluster)
+
+ggplot(telecom_final2, aes(x = night_mins_s)) + geom_histogram(bins = 20)
+ggplot(telecom_final2, aes(x = night_mins_s)) + geom_histogram(bins = 20) + facet_wrap(~clusters6$cluster)
+
+ggplot(telecom_final2, aes(x = night_calls_s)) + geom_histogram(bins = 20)
+ggplot(telecom_final2, aes(x = night_calls_s)) + geom_histogram(bins = 20) + facet_wrap(~clusters6$cluster)
+
+ggplot(telecom_final2, aes(x = night_charge_s)) + geom_histogram(bins = 20)
+ggplot(telecom_final2, aes(x = night_charge_s)) + geom_histogram(bins = 20) + facet_wrap(~clusters6$cluster)
+
+ggplot(telecom_final2, aes(x = intl_mins_s)) + geom_histogram(bins = 20)
+ggplot(telecom_final2, aes(x = intl_mins_s)) + geom_histogram(bins = 20) + facet_wrap(~clusters6$cluster)
+
+ggplot(telecom_final2, aes(x = intl_calls_s)) + geom_histogram(bins = 20)
+ggplot(telecom_final2, aes(x = intl_calls_s)) + geom_histogram(bins = 20) + facet_wrap(~clusters6$cluster)
+
+ggplot(telecom_final2, aes(x = intl_charge_s)) + geom_histogram(bins = 20)
+ggplot(telecom_final2, aes(x = intl_charge_s)) + geom_histogram(bins = 20) + facet_wrap(~clusters6$cluster)
+
+ggplot(telecom_final2, aes(x = cust_serv_calls_s)) + geom_histogram(bins = 20)
+ggplot(telecom_final2, aes(x = cust_serv_calls_s)) + geom_histogram(bins = 20) + facet_wrap(~clusters6$cluster)
+
+ggplot(telecom_final2, aes(x = intl_plan_yes)) + geom_bar()
+ggplot(telecom_final2, aes(x = intl_plan_yes)) + geom_bar() + facet_wrap(~clusters6$cluster)
+
+ggplot(telecom_final2, aes(x = intl_plan_no)) + geom_bar()
+ggplot(telecom_final2, aes(x = intl_plan_no)) + geom_bar() + facet_wrap(~clusters6$cluster)
+
+ggplot(telecom_final2, aes(x = mail_plan_yes)) + geom_bar()
+ggplot(telecom_final2, aes(x = mail_plan_yes)) + geom_bar() + facet_wrap(~clusters6$cluster)
+
+ggplot(telecom_final2, aes(x = mail_plan_no)) + geom_bar()
+ggplot(telecom_final2, aes(x = mail_plan_no)) + geom_bar() + facet_wrap(~clusters6$cluster)
+```
+
+```{r}
+ggplot(telecom_churn2, aes(x = day_mins)) + geom_histogram(bins = 30) + facet_wrap(~clusters6$cluster)
+ggplot(telecom_churn2, aes(x = day_calls)) + geom_histogram(bins = 30) + facet_wrap(~clusters6$cluster)
+ggplot(telecom_churn2, aes(x = day_charge)) + geom_histogram(bins = 30) + facet_wrap(~clusters6$cluster)
+
+ggplot(telecom_churn2, aes(x = eve_mins)) + geom_histogram(bins = 30) + facet_wrap(~clusters6$cluster)
+ggplot(telecom_churn2, aes(x = eve_calls)) + geom_histogram(bins = 30) + facet_wrap(~clusters6$cluster)
+ggplot(telecom_churn2, aes(x = eve_charge)) + geom_histogram(bins = 30) + facet_wrap(~clusters6$cluster)
+
+ggplot(telecom_churn2, aes(x = night_mins)) + geom_histogram(bins = 30) + facet_wrap(~clusters6$cluster)
+ggplot(telecom_churn2, aes(x = night_calls)) + geom_histogram(bins = 30) + facet_wrap(~clusters6$cluster)
+ggplot(telecom_churn2, aes(x = night_charge)) + geom_histogram(bins = 30) + facet_wrap(~clusters6$cluster)
+
+```
+
+
+```{r}
+telecom_churn %>%
+  group_by(intl_plan) %>%
+  summarize(n = n()) %>%
+  ggplot(aes(x = intl_plan, y = n)) +
+  geom_col()
+
+telecom_churn %>%
+  group_by(v_mail_plan) %>%
+  summarize(n = n()) %>%
+  ggplot(aes(x = v_mail_plan, y = n)) +
+  geom_col()
+
+ggplot(telecom_churn, aes(x = intl_plan)) + geom_bar()
+ggplot(telecom_churn, aes(x = intl_plan)) + geom_bar() + facet_wrap(~clusters6$cluster)
+
+ggplot(telecom_churn, aes(x = v_mail_plan)) + geom_bar()
+ggplot(telecom_churn, aes(x = v_mail_plan)) + geom_bar() + facet_wrap(~clusters6$cluster)
+
+
+
+```

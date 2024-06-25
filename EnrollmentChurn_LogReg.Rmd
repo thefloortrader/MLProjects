@@ -1,0 +1,356 @@
+---
+title: "Project 1 - BAN 6025 (School Enrollment Case Study Analysis"
+output:
+  html_document:
+    df_print: paged
+---
+
+```{r, message=FALSE, warning=FALSE}
+library(pROC)
+library(caret)
+library(tidyverse)
+library(lubridate)
+library(janitor)
+library(skimr)
+library(lubridate)
+library(RSocrata)
+library(tidyquant)
+library(tidymodels)
+library(ranger)
+library(topicmodels)
+library(readr)
+library(tidyverse)
+library(lubridate)
+library(dplyr)
+library(tidytext)
+library(rtweet)
+library(readxl)
+library(janitor)
+library(devtools)
+library(Rcpp)
+library(vip)
+library(ggplot2)
+library(corrplot)
+library(MASS)
+library(VIF)
+library(vip)
+library(fastDummies)
+library(kableExtra)
+library(GGally)
+library(kableExtra)
+library(fastshap)
+library(rpart.plot)
+```
+
+```{r}
+enrollment <- read_csv("inq05_samp.csv") %>%
+  clean_names() %>%
+  mutate(enroll = as.factor(enroll))
+```
+
+```{r}
+skim(enrollment)
+```
+
+```{r}
+ char_explore <- function(col) {
+   enrollment %>%
+     ggplot(., aes(!!as.name(col))) +
+     geom_bar(aes(fill = enroll), position = "fill")
+ }
+enrollment %>%
+  ggplot(aes(x = enroll)) +
+  geom_histogram(stat = "count") +
+  labs(title = "No vs. Yes")
+
+enrollment %>%
+  group_by(enroll) %>%
+  summarize(n = n()) %>%
+  ungroup() %>%
+  mutate(pct = n/sum(n))
+```
+#graphs
+campus_visit
+instate
+referral_cntcts
+self_init_cntcts
+solicited_cntcts
+total_contacts
+avg_income
+distance
+hscrat
+init_span
+int1rat
+int2rat
+interest
+mailq
+premiere
+stuemail
+
+```{r}
+ggplot(enrollment, aes(x = campus_visit)) +
+  geom_histogram(data = subset(enrollment, enroll == '1'), fill = "red", alpha = 0.2, bins = 3) +
+  geom_histogram(data = subset(enrollment, enroll == '0'), fill = "blue", alpha = 0.2, bins = 3) +
+  labs(title = "Campus Visit by Response ('Yes' = red, 'No' = blue)")
+
+ggplot(enrollment, aes(x = instate)) +
+  geom_histogram(data = subset(enrollment, enroll == '1'), fill = "red", alpha = 0.2, stat = "count", bins = 3) +
+  geom_histogram(data = subset(enrollment, enroll == '0'), fill = "blue", alpha = 0.2, stat = "count", bins = 3) +
+  labs(title = "Enrollment by instate ('Yes' = red, 'No' = blue)")
+
+ggplot(enrollment, aes(x = referral_cntcts)) +
+  geom_histogram(data = subset(enrollment, enroll == '1'), fill = "red", alpha = 0.2, bins = 3) +
+  geom_histogram(data = subset(enrollment, enroll == '0'), fill = "blue", alpha = 0.2, bins = 3) +
+  labs(title = "Enrollment by referral_cntcts ('Yes' = red, 'No' = blue)")
+
+ggplot(enrollment, aes(x = self_init_cntcts)) +
+  geom_histogram(data = subset(enrollment, enroll == '1'), fill = "red", alpha = 0.2, bins = 3) +
+  geom_histogram(data = subset(enrollment, enroll == '0'), fill = "blue", alpha = 0.2, bins = 3) +
+  labs(title = "Enrollment by self_init_cntcts ('Yes' = red, 'No' = blue)")
+
+ggplot(enrollment, aes(x = solicited_cntcts)) +
+  geom_histogram(data = subset(enrollment, enroll == '1'), fill = "red", alpha = 0.2, bins = 3) +
+  geom_histogram(data = subset(enrollment, enroll == '0'), fill = "blue", alpha = 0.2, bins = 3) +
+  labs(title = "Enrollment by solicited_cntcts ('Yes' = red, 'No' = blue)")
+
+ggplot(enrollment, aes(x = total_contacts)) +
+  geom_histogram(data = subset(enrollment, enroll == '1'), fill = "red", alpha = 0.2, bins = 3) +
+  geom_histogram(data = subset(enrollment, enroll == '0'), fill = "blue", alpha = 0.2, bins = 3) +
+  labs(title = "Enrollment by total_contacts ('Yes' = red, 'No' = blue)")
+
+ggplot(enrollment, aes(x = distance)) +
+  geom_histogram(data = subset(enrollment, enroll == '1'), fill = "red", alpha = 0.2, bins = 3) +
+  geom_histogram(data = subset(enrollment, enroll == '0'), fill = "blue", alpha = 0.2, bins = 3) +
+  labs(title = "Enrollment by distance ('Yes' = red, 'No' = blue)")
+
+ggplot(enrollment, aes(x = interest)) +
+  geom_histogram(data = subset(enrollment, enroll == '1'), fill = "red", alpha = 0.2, bins = 3) +
+  geom_histogram(data = subset(enrollment, enroll == '0'), fill = "blue", alpha = 0.2, bins = 3) +
+  labs(title = "Enrollment by Interest ('Yes' = red, 'No' = blue)")
+
+ggplot(enrollment, aes(x = mailq)) +
+  geom_histogram(data = subset(enrollment, enroll == '1'), fill = "red", alpha = 0.2, bins = 3) +
+  geom_histogram(data = subset(enrollment, enroll == '0'), fill = "blue", alpha = 0.2, bins = 3) +
+  labs(title = "Enrollment by mailq ('Yes' = red, 'No' = blue)")
+
+ggplot(enrollment, aes(x = init_span)) +
+  geom_histogram(data = subset(enrollment, enroll == '1'), fill = "red", alpha = 0.2, bins = 3) +
+  geom_histogram(data = subset(enrollment, enroll == '0'), fill = "blue", alpha = 0.2, bins = 3) +
+  labs(title = "Enrollment by init_span ('Yes' = red, 'No' = blue)")
+
+ggplot(enrollment, aes(x = int1rat)) +
+  geom_histogram(data = subset(enrollment, enroll == '1'), fill = "red", alpha = 0.2, bins = 3) +
+  geom_histogram(data = subset(enrollment, enroll == '0'), fill = "blue", alpha = 0.2, bins = 3) +
+  labs(title = "Enrollment by int1rat ('Yes' = red, 'No' = blue)")
+
+ggplot(enrollment, aes(x = int2rat)) +
+  geom_histogram(data = subset(enrollment, enroll == '1'), fill = "red", alpha = 0.2, bins = 3) +
+  geom_histogram(data = subset(enrollment, enroll == '0'), fill = "blue", alpha = 0.2, bins = 3) +
+  labs(title = "Enrollment by int2rat ('Yes' = red, 'No' = blue)")
+  
+ggplot(enrollment, aes(x = hscrat)) +
+  geom_histogram(data = subset(enrollment, enroll == '1'), fill = "red", alpha = 0.2, bins = 3) +
+  geom_histogram(data = subset(enrollment, enroll == '0'), fill = "blue", alpha = 0.2, bins = 3) +
+  labs(title = "Enrollment by hscrat ('Yes' = red, 'No' = blue)")
+
+ggplot(enrollment, aes(x = avg_income)) +
+  geom_histogram(data = subset(enrollment, enroll == '1'), fill = "red", alpha = 0.2, bins = 3) +
+  geom_histogram(data = subset(enrollment, enroll == '0'), fill = "blue", alpha = 0.2, bins = 3) +
+  labs(title = "Enrollment by avg_income ('Yes' = red, 'No' = blue)")
+
+```
+
+```{r}
+enrollment_prep <- subset(enrollment, select = c("campus_visit", "enroll", "instate", "referral_cntcts", "self_init_cntcts", "solicited_cntcts", "total_contacts", "travel_init_cntcts", "avg_income", "distance", "hscrat", "init_span", "int1rat", "int2rat", "interest", "mailq", "premiere", "stuemail")) %>%
+  mutate_if(is.character, factor) %>%
+  mutate(enroll = as_factor(enroll))
+head(enrollment_prep)
+
+```
+
+```{r}
+set.seed(50)
+
+enrollment_split <- initial_split(enrollment_prep, prop = 0.7)
+
+enrollment_train <- training(enrollment_split)
+
+enrollment_test <- testing(enrollment_split)
+
+sprintf("Training Percentage: %1.2f%%", nrow(enrollment_train)/nrow(enrollment) * 100)
+sprintf("Testing Percentage: %1.2f%%", nrow(enrollment_test)/nrow(enrollment) * 100)
+
+```
+
+```{r}
+enrollment_recipe <- recipe(enroll ~ ., data = enrollment_train) %>%
+  step_naomit(all_numeric(), all_nominal()) %>%
+  step_log(avg_income) %>%
+  step_impute_mode(all_nominal(), -all_outcomes()) %>%
+  step_impute_median(all_numeric()) %>%
+  step_dummy(all_nominal(), -all_outcomes()) %>%
+  prep()
+enrollment_recipe
+```
+
+```{r}
+bake_test <- bake(enrollment_recipe, new_data = enrollment_test)
+
+bake_train <- bake(enrollment_recipe, new_data = enrollment_train)
+
+```
+
+```{r}
+logistic_model <- logistic_reg(mode = "classification") %>%
+  set_engine("glm") %>%
+  fit(enroll ~ ., data = bake_train)
+
+tidy(logistic_model) %>%
+  mutate_at(c("estimate", "std.error", "statistic", "p.value"), round, 10)
+```
+
+```{r}
+predict(logistic_model, bake_train, type = "prob") %>%
+  bind_cols(., predict(logistic_model, bake_train)) %>%
+  bind_cols(., bake_train) -> scored_train_model
+head(scored_train_model)
+
+predict(logistic_model, bake_test, type = "prob") %>%
+  bind_cols(., predict(logistic_model, bake_test)) %>%
+  bind_cols(., bake_test) -> scored_test_model
+head(scored_test_model)
+```
+
+```{r}
+options(yardstick.event_first = FALSE)
+```
+
+```{r}
+scored_train_model %>%
+  metrics(enroll, .pred_1, estimate = .pred_class) %>%
+  mutate(part = "training") %>%
+  bind_rows(scored_test_model %>%
+              metrics(enroll, .pred_1, estimate = .pred_class) %>%
+              mutate(part = "testing")) %>%
+  filter(.metric == "ROC-AUC")
+
+scored_test_model %>%
+  metrics(enroll, .pred_1, estimate = .pred_class) %>%
+  mutate(part = "testing") %>%
+  bind_rows(scored_train_model %>%
+              metrics(enroll, .pred_1, estimate = .pred_class) %>%
+              mutate(part = "training")) %>%
+  filter(.metric == "ROC-AUC")
+
+logistic_model %>%
+  vip(num_features = 10)
+
+scored_train_model %>%
+  mutate(model = "train") %>%
+  bind_rows(scored_test_model %>%
+              mutate(model = "test")) %>%
+  group_by(model) %>%
+  roc_curve(enroll, .pred_1) %>%
+  autoplot()
+
+scored_train_model %>%
+  conf_mat(enroll, .pred_class) %>%
+  autoplot(type = "heatmap") +
+  labs(title = "Training Confusion Matrix")
+
+scored_test_model %>%
+  conf_mat(enroll, .pred_class) %>%
+  autoplot(type = "heatmap") +
+  labs(title = "Testing Confusion Matrix")
+
+scored_train_model %>%
+  ggplot() +
+  geom_density(aes(x = .pred_1, fill = enroll), alpha = 0.5) +
+  labs(title = "Distribution of Training Scores")
+
+scored_test_model %>%
+  ggplot() +
+  geom_density(aes(x = .pred_1, fill = enroll), alpha = 0.5) +
+  labs(title = "Distribution of Testing Scores")
+```
+
+```{r}
+step_log <- glm(enroll ~ ., data = bake_train, family = binomial(link = "logit"))
+step_model <- stepAIC(step_log, direction = "both")
+summary(step_log)
+summary(step_model)
+
+```
+
+```{r}
+step_recipe <- recipe(enroll ~ campus_visit + referral_cntcts + self_init_cntcts + travel_init_cntcts + avg_income + distance + hscrat + init_span + int1rat + int2rat + interest + mailq + premiere, data = enrollment_train) %>%
+  step_impute_mode(all_nominal(), -all_outcomes()) %>%
+  step_impute_median(all_numeric()) %>%
+  step_dummy(all_nominal(), -all_outcomes()) %>%
+  prep()
+step_recipe
+```
+
+```{r}
+bake_step_train <- bake(step_recipe, new_data = enrollment_train)
+bake_step_test <- bake(step_recipe, new_data = enrollment_test)
+
+```
+
+```{r}
+logistic_step_model <- logistic_reg(mode = "classification") %>%
+  set_engine("glm") %>%
+  fit(enroll ~ ., data = bake_step_train)
+
+tidy(logistic_step_model) %>%
+  mutate_at(c("estimate", "std.error", "statistic", "p.value"), round, 10)
+```
+
+```{r}
+predict(logistic_step_model, bake_train, type = "prob") %>%
+  bind_cols(., predict(logistic_step_model, bake_train)) %>%
+  bind_cols(., bake_train) -> scored_train_step
+head(scored_train_step)
+
+predict(logistic_step_model, bake_test, type = "prob") %>%
+  bind_cols(., predict(logistic_step_model, bake_test)) %>%
+  bind_cols(., bake_test) -> scored_test_step
+head(scored_test_step)
+
+```
+
+```{r}
+#AUC
+scored_train_step %>%
+  metrics(enroll, .pred_1, estimate = .pred_class) %>%
+  mutate(part = "training") %>%
+  bind_rows(scored_test_step %>%
+              metrics(enroll, .pred_1, estimate = .pred_class) %>%
+              mutate(part = "testing")) %>%
+  filter(.metric == "ROC_AUC")
+
+logistic_step_model %>%
+  vip(num_features = 10)
+
+#ROC
+scored_train_step %>%
+  mutate(model = "train") %>%
+  bind_rows(scored_test_step %>%
+              mutate(model = "test")) %>%
+  group_by(model) %>%
+  roc_curve(enroll, .pred_1) %>%
+  autoplot()
+
+#CM
+scored_train_step %>%
+  conf_mat(enroll, .pred_class) %>%
+  autoplot(type = "heatmap") +
+  labs(title = "Confusion Matrix - Training (Step)")
+
+scored_test_step %>%
+  conf_mat(enroll, .pred_class) %>%
+  autoplot(type = "heatmap") +
+  labs(title = "Confusion Matrix - Testing (Step)")
+
+```
+

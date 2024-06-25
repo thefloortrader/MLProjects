@@ -1,0 +1,519 @@
+---
+title: "R Notebook"
+output: html_notebook
+---
+
+This is an [R Markdown](http://rmarkdown.rstudio.com) Notebook. When you execute code within the notebook, the results appear beneath the code. 
+
+Try executing this chunk by clicking the *Run* button within the chunk or by placing your cursor inside it and pressing *Ctrl+Shift+Enter*. 
+
+
+```{r, message=FALSE, warning=FALSE}
+library(pROC)
+library(caret)
+library(tidyverse)
+library(lubridate)
+library(janitor)
+library(skimr)
+library(lubridate)
+library(RSocrata)
+library(tidyquant)
+library(tidymodels)
+library(ranger)
+library(topicmodels)
+library(readr)
+library(tidyverse)
+library(lubridate)
+library(dplyr)
+library(tidytext)
+library(rtweet)
+library(readxl)
+library(janitor)
+library(devtools)
+library(Rcpp)
+library(vip)
+library(ggplot2)
+library(corrplot)
+library(MASS)
+library(VIF)
+library(vip)
+library(fastDummies)
+library(kableExtra)
+library(GGally)
+library(kableExtra)
+library(fastshap)
+library(rpart.plot)
+```
+
+
+```{r}
+organics <- read_csv("organics.csv") %>%
+  clean_names() %>%
+  mutate(target_buy = as.factor(target_buy))
+
+new_organics <- read_csv("New_organics.csv") %>%
+  clean_names()
+```
+
+```{r}
+skim(organics)
+
+organics %>%
+  count(dem_gender) %>%
+  arrange(desc(n))
+organics %>%
+  count(dem_affl) %>%
+  arrange(desc(n))
+organics %>%
+  count(dem_cluster_group) %>%
+  arrange(desc(n))
+organics %>%
+  count(dem_reg) %>%
+  arrange(desc(n))
+organics %>%
+  count(dem_tv_reg) %>%
+  arrange(desc(n))
+organics %>%
+  count(prom_class) %>%
+  arrange(desc(n))
+```
+
+```{r}
+char_explore <- function(col) {
+   organics %>%
+     ggplot(., aes(!!as.name(col))) +
+     geom_bar(aes(fill = target_buy), position = "fill")
+}
+
+organics %>%
+  ggplot(aes(x = target_buy)) +
+  geom_histogram(stat = "count") +
+  labs(title = "Customers Who Purchased Organic: 'No' = 0 vs. 'Yes' = 1")
+
+organics %>%
+  group_by(target_buy) %>%
+  summarize(n = n()) %>%
+  ungroup() %>%
+  mutate(pct = n/sum(n))
+
+```
+
+```{r}
+organics %>%
+  ggplot(aes(target_buy)) + 
+  geom_histogram(data = subset(organics, target_buy == '1'), fill = "red", alpha = 0.2, stat = "count", bins = 3) +
+  geom_histogram(data = subset(organics, target_buy == '0'), fill = "blue", alpha = 0.2, stat = "count", bins = 3) +
+  theme(axis.text.x = element_text(angle = 1, hjust = 1)) +
+  labs(title = "", x = "", y = "")
+
+```
+
+
+```{r}
+#GRAPHS...........................CHANGE TITLES
+options(scipen = 10)
+
+ggplot(organics, aes(target_buy)) + geom_bar(aes(fill=dem_cluster_group))
+
+organics %>%
+  count(dem_cluster_group)
+
+ggplot(organics, aes(x = dem_affl)) +
+  geom_histogram(data = subset(organics, target_buy == '1'), fill = "red", alpha = 0.2, bins = 35) +
+  geom_histogram(data = subset(organics, target_buy == '0'), fill = "blue", alpha = 0.2, bins = 35) +
+  labs(title = "target_buy by dem_affl ('Yes' = red, 'No' = blue)")
+
+ggplot(organics, aes(x = dem_age)) +
+  geom_histogram(data = subset(organics, target_buy == '1'), fill = "red", alpha = 0.2) +
+  geom_histogram(data = subset(organics, target_buy == '0'), fill = "blue", alpha = 0.2) +
+  labs(title = "target_buy by dem_age ('Yes' = red, 'No' = blue)")
+
+ggplot(organics, aes(x = dem_cluster_group)) +
+  geom_histogram(data = subset(organics, target_buy == '1'), fill = "red", alpha = 0.2, stat = "count", bins = 8) +
+  geom_histogram(data = subset(organics, target_buy == '0'), fill = "blue", alpha = 0.2, stat = "count", bins = 8) +
+  labs(title = "target_buy by dem_cluster_group ('Yes' = red, 'No' = blue)")
+
+ggplot(organics, aes(x = dem_gender)) +
+  geom_histogram(data = subset(organics, target_buy == '1'), fill = "red", alpha = 0.2, stat = "count", bins = 3) +
+  geom_histogram(data = subset(organics, target_buy == '0'), fill = "blue", alpha = 0.2, stat = "count", bins = 3) +
+  labs(title = "target_buy by dem_gender ('Yes' = red, 'No' = blue)")
+
+ggplot(organics, aes(x = dem_reg)) +
+  geom_histogram(data = subset(organics, target_buy == '1'), fill = "red", alpha = 0.2, stat = "count", bins = 6) +
+  geom_histogram(data = subset(organics, target_buy == '0'), fill = "blue", alpha = 0.2, stat = "count", bins = 6) +
+  labs(title = "target_buy by dem_reg ('Yes' = red, 'No' = blue)")
+
+ggplot(organics, aes(x = dem_tv_reg)) +
+  geom_histogram(data = subset(organics, target_buy == '1'), fill = "red", alpha = 0.2, stat = "count", bins = 14) +
+  geom_histogram(data = subset(organics, target_buy == '0'), fill = "blue", alpha = 0.2, stat = "count", bins = 14) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1)) +
+  labs(title = "target_buy by dem_tv_reg ('Yes' = red, 'No' = blue)")
+
+ggplot(organics, aes(x = prom_class)) +
+  geom_histogram(data = subset(organics, target_buy == '1'), fill = "red", alpha = 0.2, stat = "count", bins = 3) +
+  geom_histogram(data = subset(organics, target_buy == '0'), fill = "blue", alpha = 0.2, stat = "count", bins = 3) +
+  labs(title = "target_buy by prom_class ('Yes' = red, 'No' = blue)")
+
+ggplot(organics, aes(x = prom_spend)) +
+  geom_histogram(data = subset(organics, target_buy == '1'), fill = "red", alpha = 0.2) +
+  geom_histogram(data = subset(organics, target_buy == '0'), fill = "blue", alpha = 0.2) +
+  labs(title = "Target_buy by prom_spend ('Yes' = red, 'No' = blue)")
+
+ggplot(organics, aes(x = prom_time)) +
+  geom_histogram(data = subset(organics, target_buy == '1'), fill = "red", alpha = 0.2, bins = 3) +
+  geom_histogram(data = subset(organics, target_buy == '0'), fill = "blue", alpha = 0.2, bins = 3) +
+  labs(title = "Target_buy by prom_time ('Yes' = red, 'No' = blue)")
+
+```
+
+
+```{r}
+organics_prep <- organics %>%
+  mutate_if(is.character, factor) %>%
+  mutate(target_amt = as.factor(target_amt))
+head(organics_prep)
+
+```
+
+```{r}
+set.seed(50)
+
+organics_split <- initial_split(organics_prep, prop = 0.7)
+
+organics_train <- training(organics_split)
+
+organics_test <- testing(organics_split)
+
+sprintf("Training Percentage: %1.2f%%", nrow(organics_train)/nrow(organics) * 100)
+sprintf("Testing Percentage: %1.2f%%", nrow(organics_test)/nrow(organics) * 100)
+
+head(organics_train)
+```
+
+```{r}
+organics_recipe <- recipe(target_buy ~ ., data = organics_train) %>%
+  step_rm(id, dem_cluster, target_amt) %>%
+  step_naomit(all_nominal(), all_numeric(), -all_outcomes()) %>%
+  step_dummy(all_nominal(), -all_outcomes()) %>%
+  prep()
+organics_recipe
+```
+
+```{r}
+bake_train <- bake(organics_recipe, new_data = organics_train)
+bake_test <- bake(organics_recipe, new_data = organics_test)
+```
+
+```{r}
+logistic_model <- logistic_reg(mode = "classification") %>%
+  set_engine("glm") %>%
+  fit(target_buy ~ ., data = bake_train)
+
+tidy(logistic_model) %>%
+  mutate_at(c("estimate", "std.error", "statistic", "p.value"), round, 10)
+```
+
+```{r}
+predict(logistic_model, bake_train, type = "prob") %>%
+  bind_cols(., predict(logistic_model, bake_train)) %>%
+  bind_cols(., bake_train) -> scored_train_model
+head(scored_train_model)
+
+predict(logistic_model, bake_test, type = "prob") %>%
+  bind_cols(., predict(logistic_model, bake_test)) %>%
+  bind_cols(., bake_test) -> scored_test_model
+head(scored_test_model)
+```
+
+```{r}
+options(yardstick.event_first = FALSE)
+
+scored_test_model %>%
+  metrics(target_buy, .pred_1, estimate = .pred_class) %>%
+  mutate(part = "testing") %>%
+  bind_rows(scored_train_model %>%
+              metrics(target_buy, .pred_1, estimate = .pred_class) %>%
+              mutate(part = "training")) %>%
+  filter(.metric == "roc_auc")
+
+logistic_model %>%
+  vip(num_features = 5)
+
+scored_train_model %>%
+  mutate(model = "train") %>%
+  bind_rows(scored_test_model %>%
+              mutate(model = "test")) %>%
+  group_by(model) %>%
+  roc_curve(target_buy, .pred_1) %>%
+  autoplot()
+
+scored_train_model %>%
+  conf_mat(target_buy, .pred_class) %>%
+  autoplot(type = "heatmap") +
+  labs(title = "Training Confusion Matrix")
+
+scored_test_model %>%
+  conf_mat(target_buy, .pred_class) %>%
+  autoplot(type = "heatmap") +
+  labs(title = "Testing Confusion Matrix")
+
+scored_train_model %>%
+  ggplot() +
+  geom_density(aes(x = .pred_1, fill = target_buy), alpha = 0.5) +
+  labs(title = "Distribution of Training Scores")
+
+scored_test_model %>%
+  ggplot() +
+  geom_density(aes(x = .pred_1, fill = target_buy), alpha = 0.5) +
+  labs(title = "Distribution of Testing Scores")
+```
+
+```{r}
+step_log <- glm(target_buy ~ ., data = bake_train, family = binomial(link = "logit"))
+step_model <- stepAIC(step_log, direction = "both")
+summary(step_log)
+summary(step_model)
+```
+
+```{r}
+step_recipe <- recipe(target_buy ~ dem_affl + dem_age + dem_cluster_group + dem_gender + dem_reg + prom_class, data = organics_train) %>%
+  step_impute_mode(all_nominal(), -all_outcomes()) %>%
+  step_impute_median(all_numeric()) %>%
+  step_dummy(all_nominal(), -all_outcomes()) %>%
+  prep()
+step_recipe
+```
+
+```{r}
+bake_step_train <- bake(step_recipe, new_data = organics_train)
+bake_step_test <- bake(step_recipe, new_data = organics_test)
+```
+
+```{r}
+logistic_step_model <- logistic_reg(mode = "classification") %>%
+  set_engine("glm") %>%
+  fit(target_buy ~ ., data = bake_step_train)
+
+tidy(logistic_step_model) %>%
+  mutate_at(c("estimate", "std.error", "statistic", "p.value"), round, 10)
+```
+
+```{r}
+predict(logistic_step_model, bake_step_train, type = "prob") %>%
+  bind_cols(., predict(logistic_step_model, bake_step_train)) %>%
+  bind_cols(., bake_step_train) -> scored_train_step
+head(scored_train_step)
+
+predict(logistic_step_model, bake_step_test, type = "prob") %>%
+  bind_cols(., predict(logistic_step_model, bake_step_test)) %>%
+  bind_cols(., bake_step_test) -> scored_test_step
+head(scored_test_step)
+```
+
+```{r}
+scored_train_step %>%
+  metrics(target_buy, .pred_1, estimate = .pred_class) %>%
+  mutate(part = "training") %>%
+  bind_rows(scored_test_step %>%
+              metrics(target_buy, .pred_1, estimate = .pred_class) %>%
+              mutate(part = "testing")) %>%
+  filter(.metric == "roc_auc")
+
+logistic_step_model %>%
+  vip(num_features = 10)
+
+scored_train_step %>%
+  mutate(model = "train") %>%
+  bind_rows(scored_test_step %>%
+              mutate(model = "test")) %>%
+  group_by(model) %>%
+  roc_curve(target_buy, .pred_1) %>%
+  autoplot()
+
+scored_train_step %>%
+  conf_mat(target_buy, .pred_class) %>%
+  autoplot(type = "heatmap") +
+  labs(title = "Confusion Matrix - Training (Step)")
+
+scored_test_step %>%
+  conf_mat(target_buy, .pred_class) %>%
+  autoplot(type = "heatmap") +
+  labs(title = "Confusion Matrix - Testing (Step)")
+```
+
+```{r}
+tree_model <- decision_tree(mode="classification") %>%
+                  set_engine("rpart") %>%
+                  fit(target_buy ~ ., data = bake_train)
+tree_model$fit
+
+options(scipen=0)
+rpart.plot(tree_model$fit, roundint=FALSE, extra = 3)
+```
+
+```{r}
+tree_model_2 <- decision_tree(mode="classification",
+                            cost_complexity = 0.001,
+                            tree_depth = 5,
+                            min_n = 2) %>%
+                  set_engine("rpart") %>%
+                  fit(target_buy ~ ., data = bake_train)
+
+tree_model_2$fit
+
+options(scipen = 0)
+
+rpart.plot(tree_model_2$fit, roundint = FALSE, extra = 3)
+```
+
+```{r}
+predict(tree_model, bake_train, type = "prob") %>%
+  bind_cols(.,predict(tree_model, bake_train)) %>%
+  bind_cols(.,bake_train) -> scored_train_tree
+
+head(scored_train_tree)
+
+predict(tree_model, bake_test, type = "prob") %>%
+  bind_cols(.,predict(tree_model, bake_test)) %>%
+  bind_cols(.,bake_test) -> scored_test_tree
+
+head(scored_test_tree)
+```
+
+```{r}
+options(yardstick.event_first = FALSE)
+
+scored_train_tree %>% 
+  metrics(target_buy, .pred_1, estimate = .pred_class) %>%
+  mutate(part="training") %>%
+  bind_rows(scored_test_tree %>% 
+               metrics(target_buy, .pred_1, estimate = .pred_class) %>%
+               mutate(part="testing")) 
+  
+tree_model %>%
+  vip(num_features = 5)
+
+scored_train_tree %>%
+  mutate(model = "train") %>%
+  bind_rows(scored_test_tree %>%
+              mutate(model="test")) %>%
+  group_by(model) %>%
+  roc_curve(target_buy, .pred_1) %>%
+  autoplot()
+
+scored_train_tree %>%
+  conf_mat(target_buy, .pred_class) %>%
+  autoplot(type = "heatmap") +
+  labs(title="Confusion Matrix (Train)")
+
+scored_test_tree %>%
+  conf_mat(target_buy, .pred_class) %>%
+  autoplot(type = "heatmap") +
+  labs(title="Confusion Matrix (Test)")
+```
+
+```{r}
+predict(tree_model_2, bake_train, type = "prob") %>%
+  bind_cols(.,predict(tree_model_2, bake_train)) %>%
+  bind_cols(.,bake_train) -> scored_train_tree_2
+
+head(scored_train_tree_2)
+
+predict(tree_model_2, bake_test, type = "prob") %>%
+  bind_cols(.,predict(tree_model_2, bake_test)) %>%
+  bind_cols(.,bake_test) -> scored_test_tree_2
+
+head(scored_test_tree_2)
+```
+
+```{r}
+scored_train_tree_2 %>% 
+  metrics(target_buy, .pred_1, estimate = .pred_class) %>%
+  mutate(part="training") %>%
+  bind_rows(scored_test_tree_2 %>% 
+               metrics(target_buy, .pred_1, estimate = .pred_class) %>%
+               mutate(part="testing")) %>%
+  filter(.metric == "accuracy")
+
+tree_model_2 %>%
+  vip(num_features = 5)
+
+scored_train_tree_2 %>%
+  mutate(model = "train") %>%
+  bind_rows(scored_test_tree_2 %>%
+              mutate(model="test")) %>%
+  group_by(model) %>%
+  roc_curve(target_buy, .pred_1) %>%
+  autoplot()
+
+scored_train_tree_2 %>%
+  conf_mat(target_buy, .pred_class) %>%
+  autoplot(type = "heatmap") +
+  labs(title="Confusion Matrix (Train)")
+
+scored_test_tree_2 %>%
+  conf_mat(target_buy, .pred_class) %>%
+  autoplot(type = "heatmap") +
+  labs(title="Confusion Matrix (Test)")
+```
+
+#NEW_ORGANICS.CSV
+
+```{r}
+new_organics_prep <- new_organics %>%
+  clean_names()
+head(new_organics_prep)
+
+```
+
+```{r}
+skim(new_organics_prep)
+
+new_organics_prep %>%
+  count(dem_gender) %>%
+  arrange(desc(n))
+new_organics_prep %>%
+  count(dem_affl) %>%
+  arrange(desc(n))
+new_organics_prep %>%
+  count(dem_cluster_group) %>%
+  arrange(desc(n))
+new_organics_prep %>%
+  count(dem_reg) %>%
+  arrange(desc(n))
+new_organics_prep %>%
+  count(dem_tv_reg) %>%
+  arrange(desc(n))
+new_organics_prep %>%
+  count(prom_class) %>%
+  arrange(desc(n))
+```
+
+```{r}
+bake_new <- bake(organics_recipe, new_data = new_organics_prep)
+
+bake_new_2 <- bake(step_recipe, new_data = bake_new)
+```
+
+
+```{r}
+predict(tree_model_2, bake_new, type = "prob") %>%
+  bind_cols(.,predict(tree_model_2, bake_new)) %>%
+  bind_cols(.,bake_new) -> scored_new_organics
+
+head(scored_new_organics)
+```
+
+```{r}
+write_xlsx(scored_new_organics, 'C:\\Users\\tyler\\Documents\\Scored_New_Organics.xlsx')
+```
+
+
+
+
+
+Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
+
+When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
+
+The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.

@@ -1,0 +1,299 @@
+---
+title: "Tweet Storm on the Horizon"
+output:
+  html_document:
+    df_print: paged
+---
+# Overview 
+
+President Trump, love him or hate him or just don’t care, is the most famous & powerful Twitter user of all time. Like it or not, President Trump’s tweets have become a source of information. The New York Times, Wall Street Journal and others news outlets and take a look at President Trump’s Tweets why shouldn’t we? This week let’s put politics aside and let the data do the talking! You can either use my dataset "TrumpQ12020Tweets.csv" or grab the latest tweets from the http://www.trumptwitterarchive.com/. Just be sure to grab enough to do some analysis - i.e. 3 months or more.
+
+```{r setup, include=FALSE, warning=FALSE,message=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+## Load Libraries
+```{r, message= FALSE, warning=FALSE}
+library(topicmodels)
+library(readr)
+library(tidyverse)
+library(lubridate)
+library(dplyr)
+library(tidytext)
+library(rtweet)
+library(readxl)
+library(janitor)
+library(devtools)
+library(Rcpp)
+library(htmlwidgets)
+library(wordcloud2)
+```
+
+### load tweets 
+
+Note the data is pipe delimited( delim = "|") so you'll need to read them with read_delim instead of read_csv, if you read ahead you'll also see that you might need to transform created_at as a date variable (col_types = cols(created_at = col_datetime(format = "%m-%d-%Y %H:%M:%S"))) 
+
+"TrumpQ12020Tweets.csv"
+
+```{r, message=FALSE, warning=FALSE}
+tweets <- read_delim("TrumpQ12020Tweets.csv", delim = "|", col_types = cols(created_at = col_datetime(format = "%m-%d-%Y %H:%M:%S")))
+```
+
+## Term Frequency & Wordcloud 
+
+create tweet_freq table
+
+1. create a month_varaible 
+2. parse terms into words, remove the following 
+  - stop words
+  - c("t.co", "https", "false", "twitter", "iphone", "amp", "rt", "android")
+3. summarize by month and word
+4. take top 100 words by month 
+
+create the following three word clouds: 
+1. word cloud of all terms 
+1. word cloud for month 1 
+2. word cloud for month 2 
+3. word cloud for month 3 
+
+answer: what terms jump out at you? 
+
+```{r, message=FALSE, warning=FALSE}
+tweet_frequency <- tweets %>%
+  mutate(month = paste(month(created_at, label = TRUE, abbr = TRUE))) %>%
+  unnest_tokens(word, text) %>%
+  anti_join(stop_words) %>%
+  filter(!word %in% c("t.co", "https", "false", "twitter", "iphone", "amp", "rt", "android")) %>%
+  filter(!str_detect(word, "^\\d")) %>%
+  group_by(word, month) %>%
+  summarize(n = n()) %>%
+  ungroup() %>%
+  arrange(desc(n))
+tweet_frequency %>%
+  head(100)
+```
+
+```{r, message=FALSE, warning=FALSE}
+tweet_frequency %>%
+  filter(month == "Jan") %>%
+  select(word = word, n = n) %>%
+  wordcloud2()
+```
+
+```{r, message=FALSE, warning=FALSE}
+tweet_frequency %>%
+  filter(month == "Feb") %>%
+  select(word = word, n = n) %>%
+  wordcloud2()
+```
+
+```{r, message=FALSE, warning=FALSE}
+tweet_frequency %>%
+  filter(month == "Mar") %>%
+  select(word = word, n = n) %>%
+  wordcloud2()
+```
+
+#      The @realdonaldtrump handle as well as the words, "democrat", "president", "impeachment", "whitehouse", "coronavirus", "news", "senate", "house", "american", and "people" are all mentioned very prominently throughout these three months. Additionally, Trump's name is mentioned often within his own tweets, but this is likely due to him reposting articles or pieces on his Twitter page that reference or include his own name. 
+
+## Bigram Analysis 
+
+create table bigram_freq by 
+1. create a bigram 
+2. summarize by bigram 
+3. use separate to split bigram into word1 and word2 then filter the following
+  - stop words against both word1 and word2 
+  - c("t.co", "https", "false", "twitter", "iphone", "amp", "rt", "android")
+  - filter digits 
+4. create a bigram varaible by combining word1 and word2 together 
+
+create the following 
+
+1. wordcloud of top 100 bigram terms. 
+2. make a chart of the top 10 terms that come after the word "fake", be sure to use coordinate flip 
+3. make a chart of the top 10 terms that come before the word "media", be sure to use coordinate flip 
+4. make a chart of the top 3 terms that before  "joe", be sure to use coordinate flip 
+
+answer: what jumps out at you? 
+
+```{r, message=FALSE, warning=FALSE}
+bigram_frequency <- tweets %>%
+  unnest_tokens(bigram, text, token = "ngrams", n = 2, collapse = NULL) %>%
+  group_by(bigram) %>%
+  summarize(n = n()) %>%
+  separate(bigram, c("word1", "word2"), sep = " ") %>%
+  anti_join(stop_words, by = c("word1" = "word")) %>%
+  anti_join(stop_words, by = c("word2" = "word")) %>%
+  filter(!word1 %in% c("t.co", "https", "false", "twitter", "iphone", "amp", "rt", "android")) %>%
+  filter(!str_detect(word1, "^\\d")) %>%
+  filter(!word2 %in% c("t.co", "https", "false", "twitter", "iphone", "amp", "rt", "android")) %>%
+  filter(!str_detect(word2, "^\\d")) %>%
+  mutate(bigram = str_c(word1, word2, sep = " ")) %>%
+  arrange(desc(n))
+bigram_frequency
+```
+```{r, message=FALSE, warning=FALSE}
+bigram_frequency %>%
+  top_n(100, n) %>%
+  select(word = bigram, n = n) %>%
+  wordcloud2()
+```
+
+```{r, message=FALSE, warning=FALSE}
+bigram_frequency %>%
+  filter(word1 == "fake") %>%
+  filter(!str_detect(word2, "\\d")) %>%
+  top_n(10, n) %>%
+  ggplot(aes(x = reorder(bigram, n), y = n, fill = NULL)) +
+  geom_col(show.legend = FALSE) +
+  labs(title = "Top 10 Terms Containing 'Fake' as Word1", x = NULL, y = "Frequency") +
+  coord_flip()
+```
+
+```{r, message=FALSE, warning=FALSE}
+bigram_frequency %>%
+  filter(word2 == "media") %>%
+  filter(!str_detect(word1, "\\d")) %>%
+  top_n(10, n) %>%
+  ggplot(aes(x = reorder(bigram, n), y = n, fill = NULL)) +
+  geom_col(show.legend = FALSE) +
+  labs(title = "Top 10 Terms Containing 'Media' as Word2", x = NULL, y = "Frequency") +
+  coord_flip()
+```
+
+```{r, message=FALSE, warning=FALSE}
+bigram_frequency %>%
+  filter(word2 == "joe",
+         !str_detect(word1, "\\d")) %>%
+  top_n(3, n) %>%
+  ggplot(aes(x = reorder(bigram, n), y = n, fill = NULL)) +
+  geom_col(show.legend = FALSE) +
+  labs(title = "Top 10 Terms Containing 'Joe' as Word2", x = NULL, y = "Frequency") +
+  coord_flip()
+```
+
+#       Some of the bigrams are very interesting to me, especially the nicknames and phrases such as "mini mike" and "impeachment hoax". I also thought it was peculiar that instead of "president trump" being the most frequently occurring bigram, it was "president" followed by Trump's Twitter handle. Upon further contemplation, I figured it must be due to the fact that there lies a purpose in tagging oneself when posting a tweet (I have no idea how twitter works).
+
+## Sentiments
+
+create sentiment_by_month 
+1. inner join words_by_month to "bing" sentiments 
+2. group by month and sentiment 
+3. get the top 10 words by month 
+4. make words with negative sentiment negative (-n) and positive words positive
+
+create the following bar charts 
+
+1. chart 1 sentiment for month 1, besure to order n, and coord_flip 
+2. chart 1 sentiment for month 2, besure to order n, and coord_flip 
+3. chart 1 sentiment for month 3, besure to order n, and coord_flip 
+
+Answer: what if anything does this tell you? 
+
+```{r, message=FALSE, warning=FALSE}
+sentiment_by_month <- tweet_frequency %>%
+  inner_join(get_sentiments("bing"), by = "word") %>%
+  group_by(month, sentiment) %>%
+  top_n(10, month) %>%
+  mutate(sentiment_score = if_else(sentiment == "negative", -n, n))
+sentiment_by_month
+```
+
+```{r, message=FALSE, warning=FALSE}
+sentiment_by_month %>%
+  filter(month == "Jan") %>%
+  top_n(10, n) %>%
+  ggplot(aes(x = reorder(word, sentiment_score), y = sentiment_score, fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  labs(title = "Sentiments for the Month of January", x = "Word", y = "Frequency") +
+  coord_flip()
+```
+
+```{r, message=FALSE, warning=FALSE}
+sentiment_by_month %>%
+  filter(month == "Feb") %>%
+  top_n(10, n) %>%
+  ggplot(aes(x = reorder(word, sentiment_score), y = sentiment_score, fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  labs(title = "Sentiments for the Month of February", x = "Word", y = "Frequency") +
+  coord_flip()
+```
+
+```{r, message=FALSE, warning=FALSE}
+sentiment_by_month %>%
+  filter(month == "Mar") %>%
+  top_n(10, n) %>%
+  ggplot(aes(x = reorder(word, sentiment_score), y = sentiment_score, fill = sentiment)) +
+  geom_col(show.legend = FALSE) +
+  labs(title = "Sentiments for the Month of March", x = "Word", y = "Frequency") +
+  coord_flip()
+```
+
+#      This tells me that there are certain categorizations of words that were not previously defined and that we were able to define them by unnesting the text within the tweets (and words within the text) while providing sentiment values to certain words. We were able to then create positive and negative categorizations of words or phrases, which we could then categorize as positive/negative groups or types of words. 
+
+## Topic Prep 
+
+Create tweet_dtm by preparing a Document Term Matrix (dtm) 
+
+1. unest tokens into words 
+2. remove the following 
+  - stop words
+  - c("t.co", "https", "false", "twitter", "iphone", "amp", "rt", "android")
+3. summarize by id_str (tweet id) and word
+4. take top 20 words by id 
+
+create tweet_lda by taking your tweet_dtm, pick a value of k (4,6,8 or 10)
+
+```{r, message=FALSE, warning=FALSE}
+tweet_dtm <- tweets %>%
+  unnest_tokens(word, text) %>%
+  anti_join(stop_words) %>%
+  filter(!word %in% c("t.co", "https", "false", "twitter", "iphone", "amp", "rt", "android")) %>%
+  filter(!str_detect(word, "\\d")) %>%
+  group_by(id_str, word) %>%
+  summarize(n = n()) %>%
+  top_n(20, id_str) %>%
+  cast_dtm(id_str, word, n)  
+tweet_lda <- LDA(tweet_dtm, k = 4, control = list(seed = 1000))
+```
+
+## Topic Model 
+
+1. document term matrix needs to be cleaned up and generate beta 
+2. generate topic terms by extracting top_n by beta 
+3. plot your topics 
+
+Answer what topics did you idenitfy? 
+
+```{r, message=FALSE, warning=FALSE}
+tidy_tweet_lda <- tidy(tweet_lda, matrix = "beta")
+topic_tweet_terms <- tidy_tweet_lda %>%
+  group_by(topic) %>%
+  top_n(8, beta) %>%
+  arrange(topic) %>%
+  filter(!term %in% c("realdonaldtrump", "people", "time", "president", "trump", "mini")) %>%
+  mutate(term = reorder(term, beta)) %>%
+  ungroup() %>%
+  arrange(desc(beta)) %>%
+  ggplot(aes(term, beta, fill = as.factor(topic))) +
+  geom_col(show.legend = FALSE) +
+  coord_flip() +
+  labs(title = "Top 4 Topic Categories", x = NULL, y = expression(beta)) +
+  facet_wrap(~ topic, ncol = 2, scales = "free") +
+  theme(axis.text.x = element_text(angle = 45, vjust = 1.5, hjust = 1.5))
+topic_tweet_terms
+```
+
+#Identifiable Topics of Trump's Tweets:
+#Topic I - Bernie Sanders & Impeachment/COVID-19
+#Topic II - Impeachment & COVID-19
+#Topic III - Democrats & the House of Representatives
+#Topic IV - Democrats, Fake News, and the Senate
+
+## Finally, 
+
+Based on your analysis of President Trump's tweets, what stood out to you? what did you think about this type of analysis. Write up your thoughts on this analysis. 
+
+#      I would say what stood out to me most was the consistency of some terminology and language used in the tweets that were included within our dataset. It seems as though many of the tweets are about similar topics and or include very similar terminological references to other postings or news, especially during certain periods such as the months of January and March. A multitude of tweets during the month of January mention, "impeachment", "fake news", and "democrats" tens of times while there was a stark increase by the former president in the use of the word, "coronavirus" during the month of March. Many of the tweets also mention the same individuals over and over, including the  nicknames and many of our frequtnyly-used topics. 
+#      I think these kinds of text analyses are interesting because they allow us to make associations between certain aspects of written language that we might not otherwise be aware of. For instance, it is often the case in the modern-day that political adversaries express their distaste for one another's campaigns via a socialized platform. This "dichotomy" may be perceived as general and party-related, however via the use of methods associated with text analysis, we might be able to identify certain trends relevant to their discussions with one another and the language that they use. This is also an effective practice for diminishing the anonymity of authors who may pose certain threats to society or who request anonymity even though they are a political officials who represent a public body. Analytical methodologies such as these have also been used to uncover the identities of authors of political scorn letters and warnings, dangerous criminals, and programmers who encrypt illegally mined data with similar keys.
+
