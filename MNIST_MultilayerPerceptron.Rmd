@@ -1,9 +1,3 @@
----
-title: "Project 5 - BAN 6053: Introduction to Machine Learning"
-author: Tyler Grosman
-output: html_notebook
----
-
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
@@ -53,11 +47,6 @@ library(stopwords)
 library(tensorflow)
 library(embed)
 library(nnet)
-
-```
-
-```{r}
-#setwd("C:/Users/tyler/OneDrive/Documents/Projects_and_homework/MSBA Fall 2021/BAN 6053 Intro. to Machine Learning/Project 5")
 ```
 
 ```{r}
@@ -128,10 +117,6 @@ mlp_wf <- workflow() %>%
 ```
 
 ## -- MLP Tuning -- 
-
-```{r}
-
-```
 
 fit_control <- trainControl(method = "repeatedcv", 
                            number = 10, 
@@ -514,10 +499,10 @@ predict(mlp_wf, digit_holdout, type = "prob") %>%
   bind_cols(predict(mlp_wf, digit_holdout, type = "class")) %>%
   bind_cols(., digit_holdout) -> holdout_score_mlp
 
-kaggle <- holdout_score_mlp %>%
+holdout <- holdout_score_mlp %>%
   dplyr::select(id, label = .pred_class)
 
-write_csv(kaggle_mlp, "Project_5_MLP_Preds_TylerGrosman.csv")
+write_csv(holdout_mlp, "Project_5_MLP_Preds_TylerGrosman.csv")
 ```
 
 ```{r}
@@ -525,10 +510,10 @@ predict(rf_final_fit, digit_holdout_scaled, type = "prob") %>%
   bind_cols(predict(rf_final_fit, digit_holdout_scaled, type = "class")) %>%
   bind_cols(., digit_holdout) -> holdout_score_rf
 
-kaggle_rf<- holdout_score_rf %>%
+holdout_rf<- holdout_score_rf %>%
   dplyr::select(id, label = .pred_class)
 
-write_csv(kaggle_rf, "Project_5_RF_Preds_TylerGrosman.csv")
+write_csv(holdout_rf, "Project_5_RF_Preds_TylerGrosman.csv")
 ```
 
 ```{r}
@@ -536,10 +521,10 @@ predict(xgb_final_fit, digit_holdout_scaled, type = "prob") %>%
   bind_cols(predict(xgb_final_fit, digit_holdout_scaled, type = "class")) %>%
   bind_cols(., digit_holdout) -> holdout_score_xgb
 
-kaggle_xgb <- holdout_score_xgb %>%
+holdout_xgb <- holdout_score_xgb %>%
   dplyr::select(id, label = .pred_class)
 
-write_csv(kaggle_xgb, "Project_5_XGB_Preds_TylerGrosman.csv")
+write_csv(holdout_xgb, "Project_5_XGB_Preds_TylerGrosman.csv")
 ```
 
 ```{r}
