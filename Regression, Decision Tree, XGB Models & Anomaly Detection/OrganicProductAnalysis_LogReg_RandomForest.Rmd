@@ -479,10 +479,8 @@ new_organics_prep %>%
 
 ```{r}
 bake_new <- bake(organics_recipe, new_data = new_organics_prep)
-
 bake_new_2 <- bake(step_recipe, new_data = bake_new)
 ```
-
 
 ```{r}
 predict(tree_model_2, bake_new, type = "prob") %>%
@@ -493,15 +491,5 @@ head(scored_new_organics)
 ```
 
 ```{r}
-write_xlsx(scored_new_organics, 'C:\\Users\\tyler\\Documents\\Scored_New_Organics.xlsx')
+write_xlsx(scored_new_organics, 'Scored_New_Organics.xlsx')
 ```
-
-
-
-
-
-Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
-
-When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
-
-The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
