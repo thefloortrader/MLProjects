@@ -1,18 +1,5 @@
----
-title: "Predicting Car Prices"
-output: html_notebook
----
-#PART 1
-## Install and Load the libraries
+
 ```{r}
-#install.packages("corrplot")
-#install.packages("MASS")
-#install.packages("car")
-#install.packages("VIF")
-#install.packages("fastDummies")
-
-#load libraries
-
 library(ggplot2)
 library(corrplot)
 library(MASS)
@@ -20,32 +7,13 @@ library(skimr)
 library(readr)
 library(VIF)
 library(fastDummies)
-
 ```
-
-#load data
 
 ```{r}
-data_car <- read_csv("bluebookregression.csv") 
-
+data_car <- read_csv("bluebookregression.csv")
 data_car1 <- subset(data_car, select = c(Price, Cylinder, Liter, Doors, Cruise, Sound, Leather, Mileage))
-
 data_car1
 ```
-
-## Are cars with lower mileage worth more?  
-
-## Exploratory Analysis
-
-## Scatterplot PRICE vs. MILEAGE
-
-#Does there appear to be a linear relationship between price and mileage?
-
-### After looking at this scatterplot, we see that there doesn't appear to be a really strong linear relationship between price and mileage
-
-#Do you notice anything unusual about the graph?
-
-### If we were to just look at cars that are more than $50,000, we see a pretty strong negative relationship between price and mileage. If we look outside of this area, everything is rather scattered.
 
 ```{r}
 data_car1 %>%
@@ -53,103 +21,54 @@ data_car1 %>%
   geom_point() +
   labs(title = "PRICE vs. MILEAGE", 
        x = "Price", y = "Mileage")
-
-
 ```
-
-# What is the Correlation between price and mileage?
-
-##There doesn't seem to be a very strong relationship between price and mileage. The correlation is -0.143.
 
 ```{r}
 cor(data_car$Price, data_car$Mileage)
 ```
-# Simple Linear Regression Between Price and Mileage
-
-## After doing a simple linear regression, we see that the R^2 is 0.02046. 
-
-#Based on this model alone, does MILEAGE appear to be significant predictor of PRICE?
-
-## No it does not
 
 ```{r}
 simple_model <- lm(Price ~ Mileage, data = data_car)
-
 simple_model
-
 summary(simple_model)
 ```
-## Correlation Matrix
 
-##Some correlated variables with Price are: cylinder, Liter, and Cruise
 ```{r}
 cormat <- cor(data_car1)
 round(cormat, 2)
 corrplot(cormat)
-
 pairs(data_car1[2:5])
 ```
-## Multiple Linear Regressions
 
-#Fit multiple regression model
-
-### Immediately, with a linear regression model with all the variables included, we see that the R^2 goes up to 0.44.
 ```{r}
 fullreg <- lm(Price~., data_car1)
-
-
 fullreg
 summary(fullreg)
-
 ```
-## Different Subsets of Variables
 
-## REG 1: Cylinder, Liter, and Cruise ( Liter appears to not be significant), R^2 = 0.3841
 ```{r}
 reg1 <- lm(Price ~ Cylinder + Liter + Cruise, data_car1)
-
 reg1
 summary(reg1)
 ```
 
-##REG 2 
-
-## This is the model I got when taking only the significant variables out of the full regression model. The R^2 is 0.4415, all variables are significant
 ```{r}
 reg2 <- lm(Price ~ Cylinder + Doors + Cruise + Sound + Leather + Mileage, data_car1)
-
 reg2
 summary(reg2)
 ```
-## REG3
-
-## In this regression, I took out Mileage and the R^2 went down to 0.4258
 
 ```{r}
 reg3<- lm(Price ~ Cylinder + Doors + Cruise + Sound + Leather, data_car1)
-
 reg3
 summary(reg3)
 ```
-## What do yo usee in terms of Similarities? Differences?
-
-### In all the models, I see that Cylinder and Cruise are highly significant variables to the model. When comparing differences, you can see that the R^2 is best when all the variables except Liter is used. 
-
-
-# Stepwise
-
-##This stepwise function increases our R^2 model to 0.4457. The variables included are: 
-Cylinder, Doors, Cruise, Sound, Leather, Mileage
 
 ```{r}
 step <- stepAIC(fullreg, direction="both")
 summary(step)
 ```
-#We need to now validate the assumptions made when creating our model using the residuals plot
 
-#First we will check for heteroskedasticity(non-constant variance)
-
-##To do this we will create a scatterplot of the residuals and the predicted values or the residuals and one x variable
 ```{r}
 #looks at spread of residuals as mileage changes
 data_car1 %>%
@@ -170,97 +89,60 @@ data_car1 %>%
   geom_histogram() +
   labs(x = "Residuals(step)", y = "Count")
 
-#will give you QQ plot, residuals vs fitted and standardized residuals vs fitted
 plot(step)
-
 ```
-#PART 2
 
-#We see in the plots above that there is a megaphone shape to our residuals vs fitted plot which violates the assumption of heteroskedasticity, a right skewed histogram which violates the assumption of a normal distrubution and we see the presence of outliers in the QQ plot 
-
-#Now we need to transform price while leaving the explanatory variables the same to correct these violations and meet the original assumptions
 ```{r}
-#We can use ln(Price)
-
 reg4<- lm(log10(Price) ~ Cylinder + Doors + Cruise + Sound + Leather + Mileage, data_car1)
-
 reg4
 summary(reg4)
-
 plot(reg4)
 ```
 
 ```{r}
-#or we can use sqrt(Price)
 reg5<- lm(sqrt(Price) ~ Cylinder + Doors + Cruise + Sound + Leather + Mileage, data_car1)
-
 reg5
 summary(reg5)
-
 plot(reg5)
-
 ```
-#We see in the plots above after trasnforming using natural log and square root that there is no more megaphone shape seen in the residuals plot for either
-#We also see that the R-squared has gone up to .46 when transforming using the natural log
-#Overall, these two transformations reduce if not eliminate heteroskedasticity and the natural log transformation increases the R-squared value
-#Now we need to consider the outliers
-```{r}
-#Look at the QQ plot and residuals plots of the original regression to see possible outliers
 
+```{r}
 plot(step)
-
-
 ```
-#You can see in the residuals plot that in the upper right corner there are a clear line of outliers and then when you observe the QQ plot you can see those outliers that skew from the line in the plot on the right hand side
-```{r}
-#to correct these outliers we can find out IQR and then use those measurements to remove points
 
-#find Q1, Q3, and interquartile range for values
+```{r}
+
 Q1 <- quantile(data_car1$Price, .25)
 Q3 <- quantile(data_car1$Price, .75)
 IQR <- IQR(data_car1$Price)
 
 #only keep rows in dataframe that have values within 1.5*IQR of Q1 and Q3
 no_outliers <- subset(data_car1, data_car1$Price > (Q1 - 1.5*IQR) & data_car1$Price < (Q3 + 1.5*IQR))
-
 head(no_outliers)
-
 ```
-#Now we will want to check our regression using the data without outliers to see those outlier's effects
-#We can see from the regression plots and QQ plots that there is less of that megaphone shape but it is still there and that the QQ plot has most of the values closer to the normal line
+
+
 ```{r}
-
 reg6<- lm(Price ~ Cylinder + Doors + Cruise + Sound + Leather + Mileage, no_outliers)
-
 reg6
 summary(reg6)
-
 plot(reg6)
-
 ```
-#We are now intereted in looking at the residual plots for our model when we use the data set that does not contain outliers as well as taking the natural log of our variable of interest
-##We end up seeing a much straighter QQ plot and minimal megaphone shaping in the scatterplot that compares the residuals and fitted values(We also see the R-squared value increase compared to model 6)
 
 ```{r}
-
 reg7<- lm(log10(Price) ~ Cylinder + Doors + Cruise + Sound + Leather + Mileage, no_outliers)
-
 reg7
 summary(reg7)
-
 plot(reg7)
 ```
+
 #This step will run 4 different regression models in which all have the natural log of price taken. 
 #Regression 1 will remove all variables and just keep mileage while using the data set including outliers
 #Regression 2 will keep all variables and use the data set including outliers
 #Regression 3 will keep all variables and use the data set that has removed outliers
 #Regression 4 will remove all variables except for mileage and use the data set that has removed outliers
 
-#Now that we have our varying regression models, we want to look at histograms of the residuals to check for normality
-##We see after observing the histograms that our starting model is skewed to the right the other four histograms seem to move the curve closer to being normal but the model that excludes the outliers, keeps all continuous variables, and takes the log of price seems to give us the most normalized distribution
-
 ```{r}
-
 #looks at histogram of residuals for original regression
 data_car1 %>%
   ggplot(aes(x=residuals(step)))+
@@ -298,145 +180,91 @@ no_outliers %>%
   ggplot(aes(x=residuals(reg11)))+
   geom_histogram() +
   labs(x = "Residuals(reg11)", y = "Count")
-
 ```
 
 #Multicollinearity
-#We want to check for explanatory variables that are highly correlated to one another
-#We end up seeing that we may want to look deeper into cylinder and liter correlation
 ```{r}
 #create 3 regression models and compare r-squared and slope coefficients
 reg12<- lm(Price ~ Mileage + Liter, data_car1)
 reg13<- lm(Price ~ Mileage + Cylinder, data_car1)
 reg14<- lm(Price ~ Mileage + Liter + Cylinder, data_car1)
-
 summary(reg12)
 summary(reg13)
 summary(reg14)
 ```
-#We calculate the correlation between liters and cylinders which is 0.958 meaning that those two variables are highly correlated
+
 ```{r}
 #look at the correlation between Liter and Cylinder variables
 cor(data_car1$Liter, data_car1$Cylinder)
-
 ```
-#PART 3
 
-#Dummy Variables
-#We want to make dummy variables for these categorical variables to be able to see their effect on the price 
-#The dummy variables simply turn each option for make, model, trim, and type into a binary variable that can then be seen individually within the regression output
 ```{r}
-
-#We need to create a new subset of our data that includes both continous and categorical variables
 data_car2 <- subset(data_car, select = c(Make, Model, Trim, Type, Price, Liter, Doors, Cruise, Sound, Leather, Mileage))
-
 #This step will turn the specified columns into dummy variables and then remove the cumulative columns 
 dataf <- dummy_cols(data_car2, select_columns = c('Make', 'Model','Trim','Type'), remove_selected_columns =TRUE)
-
 head(dataf)
-
-
 ```
-
-## Explore the relationship between categorical variables and price using boxplots. What conclusions do you make?
-
-##As one would think, the price does seem to be impacted by model, make, trim, and type. For example, convertibles tend to have a higher range of prices than other types of cars.It is also important to note that Chevorlet's while being at the lower price range when looking at the boxplots, also has a great number of outliers that make the range pretty large in comparison to other makes of cars. Things such as the range of prices based on these specific categorical variables will come in handy when making the regression model. 
-
 
 ```{r}
 boxplot(Price~Make, data = data_car2, main = "Price vs. Make", xlab = "Make", ylab = "Price")
-
 boxplot(Price~Model, data = data_car2, main = "Price vs. Model", xlab = "Model", ylab = "Price")
-
 boxplot(Price~Trim, data = data_car2, main = "Price vs. Trim", xlab = "Trim", ylab = "Price")
-
 boxplot(Price~Type, data = data_car2, main = "Price vs. Type", xlab = "Type", ylab = "Price")
 ```
-
-## Dummy ## Explore the relationship between categorical variables and price using boxplots. What conclusions do you make?
-
-##As one would think, the price does seem to be impacted by model, make, trim, and type. For example, convertibles tend to have a higher range of prices than other types of cars.It is also important to note that Chevorlet's while being at the lower price range when looking at the boxplots, also has a great number of outliers that make the range pretty large in comparison to other makes of cars. Things such as the range of prices based on these specific categorical variables will come in handy when making the regression model. 
 
 
 ## Regression model with dummy variables
 
-## THe R^2 is very high for this model (0.9924). This is very high in comparison to the R^2 of the previous model (0.4457). 
 ```{r}
-
 reg15<- lm(Price ~ ., data =  dataf)
-
 summary(reg15)
-
 plot(reg15)
-
 ```
-## Regression Model with Mileage and Make
 
-## The R^2 for this regression is still higher than the ones we had done earlier without the Make (0.6647). It seems that all the variables are significant besides the Make_Saturn variable.
 ```{r}
 reg16 <- lm(Price ~ Mileage + Make_Buick + Make_Cadillac + Make_Chevrolet + Make_Pontiac + Make_SAAB + Make_Saturn, data = dataf)
-
 summary(reg16)
-
 plot(reg16)
 ```
-##Interaction Term Models
 
-## Regression that includes Mileage and Cylinders as variables
+##Interaction Term Models
 ```{r}
 reg17 <- lm(Price~ Mileage + Cylinder, data = data_car1)
-
 summary(reg17)
 ```
+
 ## Regression looking at the interaction between mileage and cylinder
 
 ```{r}
 reg18 <- lm(Price ~ Mileage*Cylinder, data = data_car1)
-
 summary(reg18)
-
 plot(reg18)
 ```
-## When comparing the two models, I initially notice that the R^2 is slightly higher in regression 18. It is also imporant to note that in reg18, the interaction variable was highly significant whereas mileage was not as significant in this model.It is also important to note that the intercept for the second model is not as significant as the intercept in the reg17 model. 
-
-## Predict the price of the car
-
-## Mileage = 10,000, cyl = 4 or cyl = 8
 
 ```{r}
 predict(reg17, data.frame(Mileage = 10000, Cylinder = 4))
-
 predict(reg17, data.frame(Mileage = 10000, Cylinder = 8))
-
 predict(reg18, data.frame(Mileage = 10000, Cylinder = 4))
-
 predict(reg18, data.frame(Mileage = 10000, Cylinder = 8))
 ```
+
 ## Predict when Mileage = 11,000
 ```{r}
 predict(reg17, data.frame(Mileage = 11000, Cylinder = 4))
-
 predict(reg17, data.frame(Mileage = 11000, Cylinder = 8))
-
 predict(reg18, data.frame(Mileage = 11000, Cylinder = 4))
-
 predict(reg18, data.frame(Mileage = 11000, Cylinder = 8))
 ```
-## The price drops when you increase the mileage from 10,000 to 11,000. It is also important to notice that when the car has 8 cylinders the price is drastically higher.
 
 ```{r}
 reg19 <- lm(Price~ Mileage, data = data_car1)
-
 summary(reg19)
-
 plot(reg19)
 ```
-#When comparing regression 19 and regression 20, the main difference is that the explanatory variable mileage is squared in regression 20 and not squared in regression 19 
+
 ```{r}
 reg20 <- lm(Price~ Mileage*Mileage, data = data_car1)
-
 summary(reg20)
-
 plot(reg20)
 ````
 
