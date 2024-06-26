@@ -1,12 +1,3 @@
----
-title: "Project 3"
-author: Tyler Grosman
-course: BAN 6025
-output: html_document
----
-
-# load libraries / install packages
-
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
@@ -32,7 +23,6 @@ library(dplyr)
 library(ggplot2)
 library(factoextra)
 library(mice)
-
 ```
 
 # Read Bank Data
@@ -49,24 +39,19 @@ telecom_churn %>%
          state_pct_churn = round(`1`/n, 3)) %>%
   arrange(desc(state_pct_churn)) -> state_churn_rate
 ```
+
 ```{r}
 state_freq <- telecom_churn %>%
   group_by(state) %>%
   summarise(state_freq = n())
 ```
 
-
 ```{r}
 head(telecom_churn) 
-
 telecom_churn1 = subset(telecom_churn, select= -c(area_code, phone, state, churn))
-
 head(telecom_churn1)
-
 skim(telecom_churn1)
-
 telecom_churn2 = subset(telecom_churn, select= -c(area_code, phone, state, churn))
-  
 ```
 
 ## impute missing values
@@ -116,52 +101,36 @@ head(telecom_final2)
 
 ```{r}
 #set a seed value so that the results are repeatable
-
 set.seed(50)
-
 #generate 5 clusters using default settings
-
 clusters <- kmeans(telecom_final2, 6, iter.max = 10, nstart = 1)
-
 str(clusters)
 clusters$size
-
 ```
 
 # visually choose number of clusters
 
 ```{r}
 # how many clusters
-
 fviz_nbclust(telecom_final2, kmeans, method = "wss")
-
 # build clusters
-
 clusters6 <- kmeans(telecom_final2, 6, iter.max = 100, nstart = 20)
 print(clusters6)
-
 # visualize clusters
-
 fviz_cluster(clusters6, telecom_final2, ellipse.type = "norm", geom = "point")
-
 ```
 
 # explore clusters
 
 ```{r}
 cluster <- as.factor(clusters6$cluster)
-
 clusters6
-
 #determine which variables are driving the cluster creation
-
 tree.clusters = tree(cluster ~ ., telecom_final2)
-
 summary(tree.clusters)
 plot(tree.clusters)
 text(tree.clusters, pretty = 0)
 tree.clusters
-
 ggplot(telecom_final2, aes(cluster)) + geom_bar()
 ```
 
@@ -237,7 +206,6 @@ ggplot(telecom_churn2, aes(x = eve_charge)) + geom_histogram(bins = 30) + facet_
 ggplot(telecom_churn2, aes(x = night_mins)) + geom_histogram(bins = 30) + facet_wrap(~clusters6$cluster)
 ggplot(telecom_churn2, aes(x = night_calls)) + geom_histogram(bins = 30) + facet_wrap(~clusters6$cluster)
 ggplot(telecom_churn2, aes(x = night_charge)) + geom_histogram(bins = 30) + facet_wrap(~clusters6$cluster)
-
 ```
 
 
@@ -259,7 +227,4 @@ ggplot(telecom_churn, aes(x = intl_plan)) + geom_bar() + facet_wrap(~clusters6$c
 
 ggplot(telecom_churn, aes(x = v_mail_plan)) + geom_bar()
 ggplot(telecom_churn, aes(x = v_mail_plan)) + geom_bar() + facet_wrap(~clusters6$cluster)
-
-
-
 ```
