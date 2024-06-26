@@ -1,9 +1,3 @@
----
-title: "Project 4 (Spotting Clunkers): BAN 6053 - Introduction to Machine Learning"
-author: Tyler Grosman
-output: html_notebook
----
-
 ```{r setup, include=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
@@ -56,11 +50,6 @@ library(reshape2)
 library(embed)
 library(textrecipes)
 library(stopwords)
-
-```
-
-```{r}
-#setwd("C:/Users/tyler/OneDrive/Documents/Projects_and_homework/MSBA Fall 2021/BAN 6053 Intro. to Machine Learning/Project 4")
 ```
 
 ```{r}
@@ -68,13 +57,13 @@ training <- read_csv("project_4_training-2.csv") %>%
   clean_names() %>%
   mutate(is_bad_buy = as_factor(is_bad_buy))
 
-kaggle <- read_csv("project_4_kaggle-2.csv") %>%
+holdout <- read_csv("holdout.csv") %>%
   clean_names()
 ```
 
 ```{r}
 skim(training)
-skim(kaggle)
+skim(holdout)
 ```
 ## High cardinality vars: make, model, trim, sub_model, color, size, vnst, quality_code
 
@@ -861,10 +850,10 @@ precision(train_scoredrf, is_bad_buy, .pred_class)
 recall(test_scoredrf, is_bad_buy, .pred_class)
 ```
 
-## -- Kaggle Prep --
+## -- holdout Prep --
 
 ```{r}
-kaggle <- kaggle %>%
+holdout <- holdout %>%
   left_join(make_freq) %>%
   dplyr::select(-make) %>%
   left_join(model_freq) %>%
@@ -884,24 +873,21 @@ kaggle <- kaggle %>%
 ```
 
 ```{r}
-kaggle %>%
+holdout %>%
   mutate_if(is.character, as.factor) %>%
   dplyr::select(-purch_date)
 ```
 
 ```{r, warning=FALSE, message=FALSE}
-#Kaggle Submission
-
-## -- Score Kaggle
-predict(rf_final_fit, kaggle, type = "prob") %>%
-  bind_cols(predict(rf_final_fit, kaggle, type = "class")) %>%
-  bind_cols(., kaggle) -> holdout_score
+## -- Score holdout
+predict(rf_final_fit, holdout, type = "prob") %>%
+  bind_cols(predict(rf_final_fit, holdout, type = "class")) %>%
+  bind_cols(., holdout) -> holdout_score
 
 skim(holdout_score)
 
-#Submit to kaggle as CSV
-kaggle <- holdout_score %>%
+holdout <- holdout_score %>%
   dplyr::select(id, IsBadBuy = .pred_1)
 
-write_csv(kaggle, "Project_4_Preds_TylerGrosman.csv")
+write_csv(holdout, "Holdout_Scored.csv")
 ```
