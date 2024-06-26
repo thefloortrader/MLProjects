@@ -140,7 +140,7 @@ fraud_comparison <- fraud_training %>%
   
 fraud_comparison
 
-fraud_holdout <- read_csv("project_2_holdout.csv") %>%
+fraud_holdout <- read_csv("holdout.csv") %>%
   clean_names() %>%
   mutate(user_agent = str_sub(user_agent, 1, 11)) %>%
   mutate(event_timestamp = as.Date.character(event_timestamp, format = "%Y-%m-%d")) %>%
@@ -164,7 +164,7 @@ fraud_holdout <- read_csv("project_2_holdout.csv") %>%
 fraud_holdout %>%
   head()
 
-kaggle <- read_csv("project_2_holdout.csv") %>% subset(select = -score)
+holdout_raw <- read_csv("holdout.csv") %>% subset(select = -score)
 ```
 
 ```{r}
@@ -899,37 +899,27 @@ precision(scored_test, event_label, .pred_class)
 recall(scored_test, event_label, .pred_class)
 ```
 
-## Holdout Preds & Kaggle (DONE)
+## Holdout Preds
 
 ```{r, warning=FALSE, message=FALSE}
 #Score Training
 predict(logistic_fit, fraud_holdout, type = "prob") %>%
   bind_cols(predict(logistic_fit, fraud_holdout, type = "class")) %>%
-  bind_cols(., fraud_holdout) -> holdout_score
+  bind_cols(., fraud_holdout) -> holdout_scored
 
-holdout_score %>%
+holdout_scored %>%
   ggplot(aes(.pred_fraud, fill = .pred_class)) +
   geom_histogram(bins = 100) +
   xlim(0, 1) +
   geom_vline(aes(xintercept = 0.06)) +
   labs(title = "Prediction File Score Distribution")
 
-#Kaggle Submission (CSV)
-kaggle <- holdout_score %>%
+holdout <- holdout_scored %>%
   mutate(event_label = as.factor(if_else(.pred_fraud >= 0.06, 1, 0))) %>%
   subset(select = c("event_id", "event_label"))
 
-kaggle
+write_csv(holdout, "holdout_scored.csv")
 
-write_csv(kaggle, "Project_2_Preds_Tyler_Grosman.csv")
-
-precision(scored_test, .pred_class)
-recall(scored_test, .pred_class)
-
+precision(holdout, .pred_class)
+recall(holdout, .pred_class)
 ```
-
-Add a new chunk by clicking the *Insert Chunk* button on the toolbar or by pressing *Ctrl+Alt+I*.
-
-When you save the notebook, an HTML file containing the code and output will be saved alongside it (click the *Preview* button or press *Ctrl+Shift+K* to preview the HTML file).
-
-The preview shows you a rendered HTML copy of the contents of the editor. Consequently, unlike *Knit*, *Preview* does not run any R code chunks. Instead, the output of the chunk when it was last run in the editor is displayed.
