@@ -406,7 +406,7 @@ resume_word_freq %>%
 #7.  make a resume_bigram_freq
 
 ```{r, message=FALSE, warning=FALSE}
-resume_bigram_freq <- pdf_text("Tyler_Grosman_Resume.pdf") %>%
+resume_bigram_freq <- pdf_text("My_Resume.pdf") %>%
   as_tibble(resume) %>%
   unnest_tokens(word, value, token = "ngrams", n = 2, n_min = 2) %>%
   filter(word %in% technology_bigram) %>%
@@ -453,13 +453,13 @@ tech_term_freq %>%
   filter(!word %in% resume_word_bigram_freq$word)
 ```
 
-#Tech-skills resume has in common with jobs
+#Tech-skills resume has in common with job descriptions
 ```{r, message=FALSE, warning=FALSE}
 tech_term_freq %>%
   filter(word %in% resume_word_bigram_freq$word)
 ```
 
-#Skills are missing from resume
+#Skills missing from resume
 ```{r, message=FALSE, warning=FALSE}
 tech_term_freq %>%
   filter(!word %in% resume_word_bigram_freq$word)
