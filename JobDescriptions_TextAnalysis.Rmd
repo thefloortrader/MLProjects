@@ -1,21 +1,6 @@
----
-title: "4_job_descriptions_and_resume.Rmd "
-author  : "Your Name Here"
-date    : "Submission Date" 
-output: 
-  html_document:
-    toc: true
-    toc_depth: 3
-    theme: paper
-    highlight: tango
----
-
-## Libraries 
-Load the following libraries, you may need to install a few!
 ```{r setup, include=FALSE, warning=FALSE,message=FALSE}
 knitr::opts_chunk$set(echo = TRUE)
 ```
-
 
 ```{r, message=FALSE, warning=FALSE}
 library(tidyverse)
@@ -33,14 +18,11 @@ library(janitor)
 library(devtools)
 library(Rcpp)
 library(topicmodels)
-
 ```
 
-
-
-There is a bug in wordcloud2 which prevents it from knitting more than 1 wordcloud, so we want to install wordcloud2 using devtools from github using  devtools::install_github("gaospecial/wordcloud2"). Just do this once. if you don't have devtools installed, install it first then install wordcloud2 like this.
-
-devtools::install_github("gaospecial/wordcloud2")
+```{r, message=FALSE, warning=FALSE}
+#devtools::install_github("gaospecial/wordcloud2")
+```
 
 ```{r, message=FALSE, warning=FALSE}
 #devtools::install_github("gaospecial/wordcloud2", force = TRUE)
@@ -50,30 +32,13 @@ library(wordcloud2)
 # Setup 
 
 -------- 
-
-Part 1. Analyze Jobs 
-
-## 1. Import 
-
-1. Create jobs dataframe by using read_excel() to read in your MSBA30-50Jobs.xlsx (after you've loaded it with jobs), you can get started by using the MSBA20JobDescription.xlsx file if you want. 
-2. I recommend piping it to clean_names() to deal with column names 
-3. Print the first 5 jobs to make sure your import works. 
-
 ```{r, message=FALSE, warning=FALSE}
 MSBA20JobDescriptions <- read_excel("MSBA20JobDescriptions.xlsx") %>%
   clean_names()
 head(MSBA20JobDescriptions, 5)
-
 ```
 
-
-# Task 1 – Job Description Term & Bigram Frequency Analysis 
-
---------
-
-## Task 1.Create a table of term frequencies 
-
-The following steps will help you make your  term_frequency table need to make your first wordcloud. 
+##term_frequency table for wordcloud. 
 
 0. make a vector called excludes <- this is just an exmaple c("key", "clients", "chicago")
 1. pipe jobs into unnest_tokens(word, job_description)
@@ -98,10 +63,10 @@ term_freq_job_descriptions <- MSBA20JobDescriptions %>%
   group_by(word) %>%
   summarise(n = n()) %>%
   arrange(desc(n))
-
 term_freq_job_descriptions %>%
   slice_max(n, n = 20)
 ```
+
 ```{r}
 term_freq_firm <- MSBA20JobDescriptions %>%
 unnest_tokens(word, firm) %>%
