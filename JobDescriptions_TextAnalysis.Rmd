@@ -40,18 +40,16 @@ head(MSBA20JobDescriptions, 5)
 
 ##term_frequency table for wordcloud. 
 
-0. make a vector called excludes <- this is just an exmaple c("key", "clients", "chicago")
-1. pipe jobs into unnest_tokens(word, job_description)
-2. pipe into anti_join(stop_words, by = c("word" = "word")) this will remove common words
-3. pipe into filter(!word %in% excludes ) this will remove excluded words  
-  - remove "key", "clients", "chicago" and any other words you think make sense
-  
-4. pipe into filter(!str_detect(word,"^\\d")) this will remove digits 
-5. group_by(word) and summarize or use count()
-6. arrange(desc(n)) 
-7. create a term_frequency table 
-8. finally, print out the the top 20 terms using top_n() or slice_max()
-
+#0. make a vector called excludes <- this is just an exmaple c("key", "clients", "chicago")
+#1. pipe jobs into unnest_tokens(word, job_description)
+#2. pipe into anti_join(stop_words, by = c("word" = "word")) this will remove common words
+#3. pipe into filter(!word %in% excludes ) this will remove excluded words  
+#  - remove "key", "clients", "chicago" and any other words you think make sense 
+#4. pipe into filter(!str_detect(word,"^\\d")) this will remove digits 
+#5. group_by(word) and summarize or use count()
+#6. arrange(desc(n)) 
+#7. term_frequency table 
+#8. print out the the top 20 terms using top_n() or slice_max()
 
 ```{r, message=FALSE, warning=FALSE}
 excludes <- c("accounting", "developer", "programmer", "C", "of", "the", "our", "clients", "are", "a", "years", "of", "on", "for", "hardware", "with", "to", "an", "which", "was", "and", "do", "may", "is", "from", "then", "as", "in", "will", "be", "there")
@@ -87,19 +85,14 @@ unnest_tokens(word, title) %>%
   arrange(desc(n))
 ```
 
-### Task 1a. 
-
-Create a wordcloud with all of the terms, using wordcloud2()
+### wordcloud with all of the terms using wordcloud2()
 
 ```{r, message=FALSE, warning=FALSE}
 term_freq_job_descriptions %>%
   wordcloud2()
-
 ```
 
-### Task 1b. 
-
-Create a wordcloud for the terms that start with the letter "a" 
+### wordcloud for the terms that start with the letter "a" 
 
 ```{r, message=FALSE, warning=FALSE}
 term_freq_job_descriptions_a <- term_freq_job_descriptions %>%
@@ -128,26 +121,19 @@ term_freq_job_titles %>%
   wordcloud2()
 ```
 
-# Task 2, Words after DATA 
+## Words AFTER "data" ... 
 
-Clearly "DATA" an important word so what words come after data? 
-
-------
-
-## Task 2.1 - Words AFTER "data" ... 
-
-1. pipe jobs 
-2. into: unnest_tokens(bigram, job_description, token = "ngrams", n = 2, n_min = 2), what does bigram do?
-3. separate bigram into two words: separate(bigram, c("word1", "word2"), sep = " ")
-4. filter for "data" filter(word1 == "data") 
-5. remove junk words on word2, filter(!word2 %in% excludes ) this will remove excluded word
-6. unite word 1 and 2 together into a bigram
-7. group_by(bigram)
-8. summarize(n=n())
-9. arrange(desc(n))
-10. save data_term_frequency 
-
-11. print top 10 data + terms 
+#1. pipe jobs 
+#2. into: unnest_tokens(bigram, job_description, token = "ngrams", n = 2, n_min = 2)
+#3. separate bigram into two words: separate(bigram, c("word1", "word2"), sep = " ")
+#4. filter for "data" filter(word1 == "data") 
+#5. remove junk words on word2, filter(!word2 %in% excludes ) this will remove excluded word
+#6. unite word 1 and 2 together into a bigram
+#7. group_by(bigram)
+#8. summarize(n=n())
+#9. arrange(desc(n))
+#10. save data_term_frequency 
+#11. print top 10 data + terms 
 
 ```{r, message=FALSE, warning=FALSE}
 data_term_freq <- MSBA20JobDescriptions %>%
@@ -173,17 +159,16 @@ bigram_freq <- MSBA20JobDescriptions %>%
   arrange(desc(n))
 bigram_freq %>%
   head()
-  
 ```
 
-## Task 2.2 - Create a word cloud of data + term combinations
+## wordcloud of "data" + term combinations
 
 ```{r, message=FALSE, warning=FALSE}
 data_term_freq %>%
   wordcloud2()
 ```
 
-## Task 2.3 - Create a bar chart of the top 15, data + term combinations
+## bar chart of top 15, "data" + term combinations
 
 ```{r, message=FALSE, warning=FALSE}
 data_term_freq %>%
@@ -194,16 +179,7 @@ data_term_freq %>%
   labs(title = "Frequency of Top 15 'Data'-Related Bigrams", x = "Bigrams", y = "Frequency")
 ```
 
-# Task 3, Technology Term Analysis  
-
-Analyze Technology Terms 
---------
-
-## Task 3 Instructions. 
-
-Here is a list of important technology terms - you of course are free to add more. 
-1. load them up. 
-2. add any additional technology term or bigram that you think are useful. 
+# Technology Term Analysis    
 
 ```{r, message=FALSE, warning=FALSE}
 technology_words <- c(
@@ -258,15 +234,13 @@ technology_bigram <- c(
   "map reduce",
   "artificial intelligence"
 )
-
 ```
 
 
 ## Create Word & Bi-Gram Frequencies - Jobs 
-
-1.	Filter the term_frequency table based on the technology_terms provided, tech_term_freq
-2.	Filter the  bigram_frequency table based on technology_bigrams provided, tech_bigram_freq
-3.	Smash the results together into technology_term_frequency using using bind_rows()
+#1. Filter term_frequency table based on the technology_terms provided, tech_term_freq
+#2. Filter bigram_frequency table based on technology_bigrams provided, tech_bigram_freq
+#3. Combine results together into technology_term_frequency using using bind_rows()
 
 ```{r, message=FALSE, warning=FALSE}
 tech_term_freq <- term_freq_job_descriptions %>%
@@ -275,10 +249,9 @@ tech_bigram_freq <- bigram_freq %>%
   filter(bigram %in% technology_bigram)
 technology_terms_bind <- bind_rows(tech_term_freq, tech_bigram_freq)
 technology_terms_bind
-
 ```
 
-### Task 3a. Make a Bar Chart of Technolgy Terms 
+### Bar Chart of Technolgy Terms 
 
 ```{r, message=FALSE, warning=FALSE}
 tech_term_freq %>%
@@ -288,7 +261,7 @@ tech_term_freq %>%
   labs(title = "Most Frequently Used Technology Terms", x = "Terms", y = "Number of Appearances")
 ```
 
-### Task 3b. Make a Wordcloud of Techology Terms 
+### Wordcloud of Techology Terms 
 
 ```{r, message=FALSE, warning=FALSE}
 tech_term_freq %>%
@@ -296,59 +269,39 @@ tech_term_freq %>%
 ```
 
 
-# Task 4. Your Resume 
-
----------
-
-## Task 4 - getting started 
-
-1. save/print your resume as PDF, it needs to be PDF format for this to work.  
-2. install pdftools and load the library(pdftools)
-3. use pdf_text to read your resume into a table. for example here's how i read my resume:  
-
-resume <- pdf_text("/Users/mikames/Downloads/Michael Ames Resume_CurrentJan2019.pdf")
-  
-> note: this makes a character vector of your resume, we need to tidy it up and get it into a table. 
+## Try with Your Resume 
+#1. save/print your resume as PDF, it needs to be PDF format for this to work.  
+#2. install pdftools and load the library(pdftools)
+#3. use pdf_text to read your resume into a table. for example here's how i read my resume:  
+#   - note: this makes a character vector of resume 
   
 ```{r, message=FALSE, warning=FALSE}
 library(pdftools)
-resume <- pdf_text("Tyler_Grosman_Resume.pdf")
-
+resume <- pdf_text("resume.pdf")
 ```
   
-## Task 4.2 - Parse your resume, filter out the common words, digits, and any excludes 
-Your resume is now a character vector, you'll need to perform the following 
-1. as_tibble(resume) will convert it to a data frame 
-2. parse text into words, using unnest_tokens(word, value)
-3. remove words you want to exclude 
-4. remove numbers
-5. group by words and count the words up. to make a resume_word_freq table.  
+## Parse resume, filter out common words, digits, and any exclusions 
+#Perform following on char vector resume: 
+#1. as_tibble(resume) will convert it to a data frame 
+#2. parse text into words, using unnest_tokens(word, value)
+#3. remove words you want to exclude 
+#4. remove numbers
+#5. group by words and count the words up. to make a resume_word_freq table.  
 
 ```{r, message=FALSE, warning=FALSE}
-resume_word_freq <- pdf_text("Tyler_Grosman_Resume.pdf") %>%
+resume_word_freq <- pdf_text("resume.pdf") %>%
   as_tibble(resume) %>%
   unnest_tokens(word, value) %>%
   anti_join(stop_words, by = c("word"="word")) %>%
   filter(!word %in% excludes,
          !str_detect(word, "\\d"),
          !str_detect(word, ".edu"),
-         !str_detect(word, "wfu"),
-         !str_detect(word, "winston"),
-         !str_detect(word, "salem"),
          !str_detect(word, "gpa"),
-         !str_detect(word, "nc"),
-         !str_detect(word, "tyler"),
-         !str_detect(word, "grosman"),
          !str_detect(word, "age"),
          !str_detect(word, "school"),
-         !str_detect(word, "wake"),
-         !str_detect(word, "forest"),
-         !str_detect(word, "university"),
          !str_detect(word, "college"),
          !str_detect(word, "learned"),
          !str_detect(word, "north"),
-         !str_detect(word, "muskoka"),
-         !str_detect(word, "woods"),
          !str_detect(word, "agreements"),
          !str_detect(word, "access"),
          !str_detect(word, "site"),
@@ -359,13 +312,9 @@ resume_word_freq <- pdf_text("Tyler_Grosman_Resume.pdf") %>%
          !str_detect(word, "arts"),
          !str_detect(word, "ide"),
          !str_detect(word, "hrs"),
-         !str_detect(word, "college"),
          !str_detect(word, "camp"),
          !str_detect(word, "aided"),
-         !str_detect(word, "evan"),
-         !str_detect(word, "arrowhead"),
          !str_detect(word, "fall"),
-         !str_detect(word, "fraternity"),
          !str_detect(word, "events"),
          !str_detect(word, "day"),
          !str_detect(word, "april"),
@@ -377,7 +326,6 @@ resume_word_freq <- pdf_text("Tyler_Grosman_Resume.pdf") %>%
          !str_detect(word, "list"),
          !str_detect(word, "status"),
          !str_detect(word, "basis"),
-         !str_detect(word, "waterfront"),
          !str_detect(word, "participated"),
          !str_detect(word, "additional"),
          !str_detect(word, "aided"),
@@ -385,8 +333,6 @@ resume_word_freq <- pdf_text("Tyler_Grosman_Resume.pdf") %>%
          !str_detect(word, "location"),
          !str_detect(word, ".com"),
          !str_detect(word, "activities"),
-         !str_detect(word, "miami"),
-         !str_detect(word, "fl"),
          !str_detect(word, "arranged"),
          !str_detect(word, "staff"),
          !str_detect(word, "attended"),
@@ -399,8 +345,6 @@ resume_word_freq <- pdf_text("Tyler_Grosman_Resume.pdf") %>%
          !str_detect(word, "coursework"),
          !str_detect(word, "created"),
          !str_detect(word, "create"),
-         !str_detect(word, "canada"),
-         !str_detect(word, "dade"),
          !str_detect(word, "files"),
          !str_detect(word, "multiple"),
          !str_detect(word, "psi"),
@@ -410,10 +354,8 @@ resume_word_freq <- pdf_text("Tyler_Grosman_Resume.pdf") %>%
          !str_detect(word, "head"),
          !str_detect(word, "index"),
          !str_detect(word, "athletes"),
-         !str_detect(word, "force"),
          !str_detect(word, "court"),
          !str_detect(word, "base"),
-         !str_detect(word, "mystic"),
          !str_detect(word, "current"),
          !str_detect(word, "term"),
          !str_detect(word, "accurately"),
@@ -427,7 +369,6 @@ resume_word_freq <- pdf_text("Tyler_Grosman_Resume.pdf") %>%
          !str_detect(word, "sound"),
          !str_detect(word, "house"),
          !str_detect(word, "variety"),
-         !str_detect(word, "mmtc"),
          !str_detect(word, "plans"),
          !str_detect(word, "conducted"),
          !str_detect(word, "county"),
@@ -446,30 +387,23 @@ resume_word_freq <- pdf_text("Tyler_Grosman_Resume.pdf") %>%
   summarize(n = n()) %>%
   arrange(desc(n))
 resume_word_freq
-
 ```
 
-## Task 4.3 - Create a word cloud of the remaining words in your resume
-
+## Wordcloud of the remaining words in resume
 ```{r, message=FALSE, warning=FALSE}
 resume_word_freq %>%
   wordcloud2()
 ```
 
-## Task 4.4 filter for technology_words and technology_bigrams 
-
-to do this you'll need to Bigram Freq. your resume, hen filter for technology_bigrams 
-
-###  Task 4.4 Steps: Bigram Freq. your resume, filter for technology_bigrams  
-
-1. as_tibble(resume) pipe into 
-2. unnest_tokens(word, value, token = "ngrams", n = 2, n_min = 2) to make bigrams 
-3. filter(word %in% technology_bigram ) for specific bigrams 
-4. group_by(word)
-5. summarize(n=n()) 
-6.  arrange(desc(n)) 
-7.  make a resume_bigram_freq
-
+### Filter for technology_words and technology_bigrams 
+#need to Bigram Freq. of resume and filter for technology_bigrams   
+#1. as_tibble(resume) pipe into 
+#2. unnest_tokens(word, value, token = "ngrams", n = 2, n_min = 2) to make bigrams 
+#3. filter(word %in% technology_bigram ) for specific bigrams 
+#4. group_by(word)
+#5. summarize(n=n()) 
+#6.  arrange(desc(n)) 
+#7.  make a resume_bigram_freq
 
 ```{r, message=FALSE, warning=FALSE}
 resume_bigram_freq <- pdf_text("Tyler_Grosman_Resume.pdf") %>%
@@ -482,18 +416,13 @@ resume_bigram_freq <- pdf_text("Tyler_Grosman_Resume.pdf") %>%
 resume_bigram_freq
 ```
 
-### 4.4 finally SMASH resume_word_freq & resume_bigram_freq together 
-
-1. use bind_rows() to do this. 
-
-
+###Combine resume_word_freq & resume_bigram_freq together  
 ```{r, message=FALSE, warning=FALSE}
 resume_word_bigram_freq <- bind_rows(resume_word_freq, resume_bigram_freq)
 resume_word_bigram_freq
 ```
 
-### TASK 4.4a - make a bar chart of combined technolgy term frequencies
-
+### Bar chart of combined technolgy term frequencies
 ```{r, message=FALSE, warning=FALSE}
 resume_word_bigram_freq %>%
   head(50) %>%
@@ -504,39 +433,34 @@ resume_word_bigram_freq %>%
 ```
 
 
-### TASK 4.4b - make a wordcloud of combined technolgy term frequencies
-
+### Wordcloud of combined technolgy term frequencies
 ```{r, message=FALSE, warning=FALSE}
 resume_word_bigram_freq %>%
   wordcloud2()
 ```
 
-## Task 5 – Compare MSBA20JobDescriptionsresume jobs. 
+### Compare job descriptions 
 
-5.1	What terms do your resume and jobs data have in common? That is, compare your resume's terms to the terms found in the job descriptions. 
+#Compare resume's terms to terms found in job descriptions 
 ```{r, message=FALSE, warning=FALSE}
 resume_word_bigram_freq %>%
   filter(word %in% term_freq_job_descriptions$word)
 ```
 
-5.2	Based on the job's terms, what terms are missing from your resume? Make a table of terms missing from your resume but found in your job descriptions. 
+#Table of terms missing from resume but found in job descriptions. 
 ```{r, message=FALSE, warning=FALSE}
 tech_term_freq %>%
   filter(!word %in% resume_word_bigram_freq$word)
 ```
 
-5.3	What tech-skills does your resume and jobs have in common?
+#Tech-skills resume has in common with jobs
 ```{r, message=FALSE, warning=FALSE}
 tech_term_freq %>%
   filter(word %in% resume_word_bigram_freq$word)
 ```
 
-5.4	Based on the job's tech-skills what skills are missing from your resume? 
-
+#Skills are missing from resume
 ```{r, message=FALSE, warning=FALSE}
 tech_term_freq %>%
   filter(!word %in% resume_word_bigram_freq$word)
-# As far as skills contained within my resume are concerned, I am missing Tableau, cloud (computing), SAS, AWS, Spark, Azure, Hive, and Power BI.
 ```
-
-
