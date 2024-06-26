@@ -188,9 +188,7 @@ enrollment_recipe
 
 ```{r}
 bake_test <- bake(enrollment_recipe, new_data = enrollment_test)
-
 bake_train <- bake(enrollment_recipe, new_data = enrollment_train)
-
 ```
 
 ```{r}
