@@ -502,7 +502,7 @@ predict(mlp_wf, digit_holdout, type = "prob") %>%
 holdout <- holdout_score_mlp %>%
   dplyr::select(id, label = .pred_class)
 
-write_csv(holdout_mlp, "Project_5_MLP_Preds_TylerGrosman.csv")
+write_csv(holdout_mlp, "holdout_mlp_scored.csv")
 ```
 
 ```{r}
@@ -513,7 +513,7 @@ predict(rf_final_fit, digit_holdout_scaled, type = "prob") %>%
 holdout_rf<- holdout_score_rf %>%
   dplyr::select(id, label = .pred_class)
 
-write_csv(holdout_rf, "Project_5_RF_Preds_TylerGrosman.csv")
+write_csv(holdout_rf, "holdout_RF_scored.csv")
 ```
 
 ```{r}
@@ -524,7 +524,7 @@ predict(xgb_final_fit, digit_holdout_scaled, type = "prob") %>%
 holdout_xgb <- holdout_score_xgb %>%
   dplyr::select(id, label = .pred_class)
 
-write_csv(holdout_xgb, "Project_5_XGB_Preds_TylerGrosman.csv")
+write_csv(holdout_xgb, "holdout_xgb_scored.csv")
 ```
 
 ```{r}
@@ -545,7 +545,6 @@ heat_map <- function(df){
     autoplot(type = "heatmap") -> h
   print(h)
 }
-
 ```
 
 ```{r}
@@ -561,14 +560,12 @@ test_scored_rf <- model_score(test_scaled, rf_final_fit, "random forest testing"
 ```{r}
 train_scored_xgb <- model_score(train_scaled, xgb_final_fit, "xgb training")
 test_scored_xgb <- model_score(test_scaled, xgb_final_fit, "xgb testing")
-
 ```
 
 ```{r}
 accuracy_score(train_scored_mlp, test_scored_mlp)
 accuracy_score(train_scored_rf, test_scored_rf)
 accuracy_score(train_scored_xgb, test_scored_xgb)
-
 ```
 
 ```{r}
