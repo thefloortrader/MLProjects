@@ -1642,7 +1642,7 @@ holdout_rf <- holdout_score_rf %>%
   mutate(loan_status = as.factor(.pred_class)) %>%
   dplyr::select(id, loan_status)
 
-write_csv(holdout_rf, "Project_6_RF_Preds2_TylerGrosman.csv")
+write_csv(holdout_rf, "holdout_rf_scored.csv")
 ```
 
 ```{r, message = FALSE, warning = FALSE}
@@ -1654,7 +1654,7 @@ holdout_xgb <- holdout_score_xgb %>%
   mutate(loan_status = as.factor(.pred_class)) %>%
   dplyr::select(id, loan_status)
 
-write_csv(holdout_xgb, "Project_6_XGB_Preds2_TylerGrosman.csv")
+write_csv(holdout_xgb, "holdout_xgb_scored.csv")
 ```
 
 ```{r, message = FALSE, warning = FALSE}
