@@ -50,11 +50,11 @@ library(reshape2)
 ```
 
 ```{r}
-fraud_original <- read_csv("project_2_training.csv", show_col_types = FALSE) %>%
+fraud_original <- read_csv("training.csv", show_col_types = FALSE) %>%
   clean_names() %>%
   mutate(event_label = as_factor(event_label))
 
-fraud_training <- read_csv("project_2_training.csv", show_col_types = FALSE) %>%
+fraud_training <- read_csv("training.csv", show_col_types = FALSE) %>%
   clean_names() %>%
   mutate(user_agent = str_sub(user_agent, 1, 11)) %>%
   mutate(event_timestamp = as.Date.character(event_timestamp, format = "%Y-%m-%d")) %>%
