@@ -53,7 +53,7 @@ library(stopwords)
 ```
 
 ```{r}
-training <- read_csv("project_4_training-2.csv") %>%
+training <- read_csv("training-2.csv") %>%
   clean_names() %>%
   mutate(is_bad_buy = as_factor(is_bad_buy))
 
