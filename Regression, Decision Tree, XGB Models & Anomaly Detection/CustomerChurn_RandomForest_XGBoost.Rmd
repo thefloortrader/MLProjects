@@ -1247,7 +1247,7 @@ accuracy_score(train_scored_rf, test_scored_rf)
 ```
 
 
-## Holdout Preds & Kaggle
+## Holdout Preds
 
 ```{r, warning=FALSE, message=FALSE}
 #Score Training
@@ -1255,22 +1255,21 @@ predict(rf_fit2, churn_holdout, type = "prob") %>%
   bind_cols(predict(rf_fit2, churn_holdout, type = "class")) %>%
   bind_cols(., churn_holdout) -> churn_holdout_score
 
-kaggle <- churn_holdout_score %>%
+holdout <- churn_holdout_score %>%
   mutate(churn = as.factor(if_else(.pred_1 >= 0.10, 1, 0)))
 
-kaggle %>%
+holdout %>%
   ggplot(aes(.pred_1, fill=churn)) +
   geom_histogram(bins = 100) +
   xlim(0, 1) +
   geom_vline(aes(xintercept = 0.095)) +
   labs(title = "Prediction File Score Distribution")
 
-#Kaggle Submission (CSV)
-kaggle <- churn_holdout_score %>%
+holdout <- churn_holdout_score %>%
   mutate(churn = .pred_1) %>%
   subset(select = c("customer_id", "churn"))
 
-kaggle
+holdout
 
-#write_csv(kaggle, "Project_1_Preds_Tyler_Grosman.csv")
+#write_csv(holdout, "Holdout_Scored.csv")
 ```
