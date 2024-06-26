@@ -136,11 +136,10 @@ summary(reg7)
 plot(reg7)
 ```
 
-#This step will run 4 different regression models in which all have the natural log of price taken. 
-#Regression 1 will remove all variables and just keep mileage while using the data set including outliers
-#Regression 2 will keep all variables and use the data set including outliers
-#Regression 3 will keep all variables and use the data set that has removed outliers
-#Regression 4 will remove all variables except for mileage and use the data set that has removed outliers
+#Regression 1 removes all variables & keeps mileage while using the dataset including outliers
+#Regression 2 keeps all variables & uses dataset including outliers
+#Regression 3 keeps all variables & uses dataset which has removed outliers
+#Regression 4 removes all variables except for mileage & uses dataset which has removed outliers
 
 ```{r}
 #looks at histogram of residuals for original regression
@@ -152,7 +151,7 @@ data_car1 %>%
 #remove all explanatory variables except mileage
 reg8<- lm(log10(Price) ~ Mileage, data_car1)
 
-#multivariable regression using natural log
+#multivariable regression w/ natural log
 reg9<- lm(log10(Price) ~ Cylinder + Doors + Cruise + Sound + Leather + Mileage, data_car1)
 
 #multivariable regression using natural log and removing outliers
@@ -184,7 +183,6 @@ no_outliers %>%
 
 #Multicollinearity
 ```{r}
-#create 3 regression models and compare r-squared and slope coefficients
 reg12<- lm(Price ~ Mileage + Liter, data_car1)
 reg13<- lm(Price ~ Mileage + Cylinder, data_car1)
 reg14<- lm(Price ~ Mileage + Liter + Cylinder, data_car1)
