@@ -1,10 +1,3 @@
----
-title: "Project 1 - BAN 6025 (School Enrollment Case Study Analysis"
-output:
-  html_document:
-    df_print: paged
----
-
 ```{r, message=FALSE, warning=FALSE}
 library(pROC)
 library(caret)
