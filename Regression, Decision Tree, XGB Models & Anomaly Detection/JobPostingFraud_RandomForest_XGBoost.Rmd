@@ -793,5 +793,5 @@ predict(xgb_workflow1, holdout, type = "prob")%>%
 holdout <- holdout_score %>%
   dplyr::select(job_id, fraudulent = .pred_1)
 
-write_csv(holdout, "OOT.csv")
+write_csv(holdout, "OOS.csv")
 ```
