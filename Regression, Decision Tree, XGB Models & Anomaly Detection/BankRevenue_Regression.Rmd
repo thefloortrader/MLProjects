@@ -1,7 +1,4 @@
----
-
 ```{r, message=FALSE, warning=FALSE}
-
 library(tidyverse)
 library(lubridate)
 library(janitor)
@@ -29,7 +26,6 @@ library(MASS)
 library(VIF)
 library(vip)
 library(fastDummies)
-
 ```
 
 ```{r, message=FALSE, warning=FALSE}
@@ -40,7 +36,6 @@ bank_revenue <- read_csv("bankrevenue.csv") %>%
   mutate(bal_total = str_replace(bal_total, "\\$", replacement = "")) %>%
   mutate(bal_total = str_replace(bal_total, "\\,", replacement = "")) %>%
   mutate(bal_total = as.numeric(bal_total))
-
 ```
 
 ```{r}
@@ -65,7 +60,7 @@ summary(step_model)
 plot(step_model)
 ```
 
-                                                 ***Summary***
+################################################################################### Summary ###########################################################################################
 
-   Using the step_model produced above, the bank has the ability to predict total revenue while factoring for only the variables that were included in the stepwise regression of the full_model, which included all of the original variables from the dataset. If the bank's goal is to increase profitability, the best course of action would be to prioritize analyzing the total balance of all accounts held by each customer, the activity 'types' on their lines of credit (credit card in this case), and activity observed in each customer's checking account. The stepwise analysis produced large coefficients for each of these variables and the bank can use this information to determine that customers with large mean or median balances across all accounts, high credit card activity, and high checking account activity will positively influence the bank's total revenue(s). These (behavioral) assumptions also assume a default rate of near 0%, which is unrealistic.
+# Using the step_model produced above, the bank has the ability to predict total revenue while factoring for only the variables that were included in the stepwise regression of the full_model, which included all of the original variables from the dataset. If the bank's goal is to increase profitability, the best course of action would be to prioritize analyzing the total balance of all accounts held by each customer, the activity 'types' on their lines of credit (credit card in this case), and activity observed in each customer's checking account. The stepwise analysis produced large coefficients for each of these variables and the bank can use this information to determine that customers with large mean or median balances across all accounts, high credit card activity, and high checking account activity will positively influence the bank's total revenue(s). These (behavioral) assumptions also assume a default rate of near 0%, which is unrealistic.
 
